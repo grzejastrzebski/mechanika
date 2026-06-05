@@ -1,0 +1,4 @@
+# Nie publikuj metadanych Git ani konfiguracji repo przez Cloudflare Workers static assets
+.git
+.gitignore
+.assetsignore

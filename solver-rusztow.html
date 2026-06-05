@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solver Rusztów MES — z wykresami Mz/Ms</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { margin: 0; background: #020617; }
+  @media print {
+    body { background: white; }
+    .no-print { display: none !important; }
+    svg { background: white !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useCallback, useRef, useEffect, useMemo, Fragment } = React;
+
+/* ============================================================
+   ICONS (zamiast lucide-react)
+   ============================================================ */
+const ic = (path) => ({size = 14, ...props}) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+    fill={props.fill || "none"} stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" {...props}>{path}</svg>
+);
+const Plus = ic(<><path d="M5 12h14"/><path d="M12 5v14"/></>);
+const Trash2 = ic(<><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>);
+const Play = ic(<polygon points="5 3 19 12 5 21 5 3"/>);
+const RotateCcw = ic(<><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></>);
+const Info = ic(<><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></>);
+const Printer = ic(<><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></>);
+const Eye = ic(<><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></>);
+const BarChart3 = ic(<><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></>);
+const Activity = ic(<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>);
+const Save = ic(<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>);
+const FolderOpen = ic(<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/>);
+
+/* ============================================================
+   GRILLAGE FEM SOLVER  —  matematyka
+   ============================================================ */
+function solveLinear(A, b) {
+  const n = A.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let k = 0; k < n; k++) {
+    let maxVal = Math.abs(M[k][k]), maxRow = k;
+    for (let i = k + 1; i < n; i++) {
+      if (Math.abs(M[i][k]) > maxVal) { maxVal = Math.abs(M[i][k]); maxRow = i; }
+    }
+    if (maxRow !== k) [M[k], M[maxRow]] = [M[maxRow], M[k]];
+    if (Math.abs(M[k][k]) < 1e-12) throw new Error('Macierz osobliwa — sprawdź podpory i geometrię.');
+    for (let i = k + 1; i < n; i++) {
+      const f = M[i][k] / M[k][k];
+      for (let j = k; j <= n; j++) M[i][j] -= f * M[k][j];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) {
+    let s = M[i][n];
+    for (let j = i + 1; j < n; j++) s -= M[i][j] * x[j];
+    x[i] = s / M[i][i];
+  }
+  return x;
+}
+
+function elementLocalStiffness(L, EI, GJ) {
+  const c1 = 12 * EI / (L*L*L), c2 = 6 * EI / (L*L), c3 = 4 * EI / L, c4 = 2 * EI / L, c5 = GJ / L;
+  return [
+    [c1, 0, c2, -c1, 0, c2],
+    [0, c5, 0, 0, -c5, 0],
+    [c2, 0, c3, -c2, 0, c4],
+    [-c1, 0, -c2, c1, 0, -c2],
+    [0, -c5, 0, 0, c5, 0],
+    [c2, 0, c4, -c2, 0, c3],
+  ];
+}
+
+function transformationMatrix(angle) {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return [[1,0,0,0,0,0],[0,c,s,0,0,0],[0,-s,c,0,0,0],[0,0,0,1,0,0],[0,0,0,0,c,s],[0,0,0,0,-s,c]];
+}
+
+function matMul(A, B) {
+  const m = A.length, n = B[0].length, p = B.length;
+  const C = Array.from({length: m}, () => new Array(n).fill(0));
+  for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) {
+    let s = 0; for (let k = 0; k < p; k++) s += A[i][k] * B[k][j]; C[i][j] = s;
+  }
+  return C;
+}
+
+function matVec(A, v) { return A.map(row => row.reduce((s,a,i)=>s+a*v[i], 0)); }
+function transpose(A) { return A[0].map((_, i) => A.map(row => row[i])); }
+
+function solveGrillage(nodes, elements, supports, loads) {
+  if (nodes.length === 0) throw new Error('Brak węzłów.');
+  if (elements.length === 0) throw new Error('Brak prętów.');
+
+  const n = nodes.length, ndof = n * 3;
+  const nodeIdx = {};
+  nodes.forEach((node, i) => { nodeIdx[node.id] = i; });
+
+  const K = Array.from({length: ndof}, () => new Array(ndof).fill(0));
+  const F = new Array(ndof).fill(0);
+  const elementInfo = [];
+
+  for (const el of elements) {
+    const i1 = nodeIdx[el.n1], i2 = nodeIdx[el.n2];
+    if (i1 === undefined || i2 === undefined) throw new Error(`Pręt ${el.id}: nieznany węzeł.`);
+    const dx = parseFloat(nodes[i2].x) - parseFloat(nodes[i1].x);
+    const dy = parseFloat(nodes[i2].y) - parseFloat(nodes[i1].y);
+    const L = Math.sqrt(dx*dx + dy*dy);
+    if (L < 1e-10) throw new Error(`Pręt ${el.id}: zerowa długość.`);
+    const angle = Math.atan2(dy, dx);
+    const EI = parseFloat(el.EI) || 1, GJ = parseFloat(el.GJ) || 1;
+    const q = parseFloat(el.q) || 0;
+    const Klocal = elementLocalStiffness(L, EI, GJ);
+    const T = transformationMatrix(angle);
+    const Kglobal = matMul(matMul(transpose(T), Klocal), T);
+    const dofs = [i1*3, i1*3+1, i1*3+2, i2*3, i2*3+1, i2*3+2];
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) K[dofs[i]][dofs[j]] += Kglobal[i][j];
+    // Wektor sił równoważnych dla obciążenia ciągłego q (w kierunku z, lokalnie):
+    // f_eq_local = [qL/2, 0, qL²/12, qL/2, 0, -qL²/12]
+    const fEqLocal = [q*L/2, 0, q*L*L/12, q*L/2, 0, -q*L*L/12];
+    // Transformacja do globalnego: f_eq_global = T^T * f_eq_local
+    const Tt = transpose(T);
+    const fEqGlobal = matVec(Tt, fEqLocal);
+    if (q !== 0) {
+      for (let i = 0; i < 6; i++) F[dofs[i]] += fEqGlobal[i];
+    }
+    elementInfo.push({el, i1, i2, L, angle, Klocal, T, dofs, q, fEqLocal});
+  }
+
+  for (const load of loads) {
+    const idx = nodeIdx[load.node];
+    if (idx === undefined) continue;
+    F[idx*3] += parseFloat(load.Fz) || 0;
+    F[idx*3+1] += parseFloat(load.Mx) || 0;
+    F[idx*3+2] += parseFloat(load.My) || 0;
+  }
+
+  const fixed = new Array(ndof).fill(false);
+  for (const sup of supports) {
+    const idx = nodeIdx[sup.node];
+    if (idx === undefined) continue;
+    if (sup.z) fixed[idx*3] = true;
+    if (sup.rx) fixed[idx*3+1] = true;
+    if (sup.ry) fixed[idx*3+2] = true;
+  }
+
+  const free = [];
+  for (let i = 0; i < ndof; i++) if (!fixed[i]) free.push(i);
+  if (free.length === 0) throw new Error('Wszystkie DOF związane.');
+
+  const Krr = free.map(i => free.map(j => K[i][j]));
+  const Fr = free.map(i => F[i]);
+  const ur = solveLinear(Krr, Fr);
+
+  const u = new Array(ndof).fill(0);
+  free.forEach((dof, i) => { u[dof] = ur[i]; });
+
+  const Ku = matVec(K, u);
+  const R = Ku.map((v, i) => v - F[i]);
+
+  const elementForces = elementInfo.map(({el, L, T, Klocal, dofs, q, fEqLocal}) => {
+    const ug = dofs.map(d => u[d]);
+    const ul = matVec(T, ug);
+    const fl = matVec(Klocal, ul).map((v, i) => v - fEqLocal[i]);
+    return {
+      el, L, q,
+      V1: fl[0], Ms1: fl[1], Mz1: fl[2],
+      V2: fl[3], Ms2: -fl[4], Mz2: -fl[5],
+      Mint_left: fl[2], Mint_right: -fl[5], Tint: fl[1],
+    };
+  });
+
+  return {
+    displacements: nodes.map((node, i) => ({id: node.id, w: u[i*3], thetaX: u[i*3+1], thetaY: u[i*3+2]})),
+    reactions: nodes.map((node, i) => ({
+      id: node.id,
+      Fz: fixed[i*3] ? R[i*3] : null,
+      Mx: fixed[i*3+1] ? R[i*3+1] : null,
+      My: fixed[i*3+2] ? R[i*3+2] : null,
+    })),
+    elementForces,
+  };
+}
+
+// Wereszczagin - całka iloczynu wykresów Mz (kwadratowych jeśli q≠0) i Ms (stałych) wzdłuż każdego pręta.
+// Wykres Mz(x) = M1*(1-x/L) + M2*x/L + q*x*(L-x)/2 = α + β*x + γ*x², gdzie:
+//   α = M1, β = (M2-M1)/L + qL/2, γ = -q/2
+// Iloczyn dwóch takich wielomianów to wielomian stopnia 4 - całkowanie analityczne.
+function integralM(M1i, M2i, qi, M1j, M2j, qj, L) {
+  const ai=M1i, bi=(M2i-M1i)/L + qi*L/2, ci=-qi/2;
+  const aj=M1j, bj=(M2j-M1j)/L + qj*L/2, cj=-qj/2;
+  return (
+    ai*aj*L
+    + (ai*bj + aj*bi)*L*L/2
+    + (ai*cj + aj*ci + bi*bj)*L*L*L/3
+    + (bi*cj + bj*ci)*L*L*L*L/4
+    + ci*cj*L*L*L*L*L/5
+  );
+}
+
+function computeWereshchagin(forces0, forces1, forces2, elements) {
+  const has2 = !!forces2;
+  let d00=0, d11=0, d10=0, d22=0, d20=0, d12=0;
+  let mzSum00=0, mzSum11=0, mzSum10=0, mzSum22=0, mzSum20=0, mzSum12=0;
+  let msSum00=0, msSum11=0, msSum10=0, msSum22=0, msSum20=0, msSum12=0;
+  const perBeam = [];
+  for (let i = 0; i < forces0.length; i++) {
+    const ef0 = forces0[i], ef1 = forces1[i];
+    const ef2 = has2 ? forces2[i] : null;
+    const el = elements[i];
+    if (!el || !ef0 || !ef1) continue;
+    const L = ef0.L;
+    const EI = parseFloat(el.EI) || 1;
+    const GJ = parseFloat(el.GJ) || 1;
+    const M0a=ef0.Mint_left, M0b=ef0.Mint_right, q0=ef0.q||0;
+    const M1a=ef1.Mint_left, M1b=ef1.Mint_right, q1=ef1.q||0;
+    const M2a=has2 ? ef2.Mint_left : 0, M2b=has2 ? ef2.Mint_right : 0, q2=has2 ? ef2.q||0 : 0;
+    const T0=ef0.Tint||0, T1=ef1.Tint||0, T2=has2 ? ef2.Tint||0 : 0;
+
+    const mz_00 = integralM(M0a, M0b, q0, M0a, M0b, q0, L);
+    const mz_11 = integralM(M1a, M1b, q1, M1a, M1b, q1, L);
+    const mz_10 = integralM(M0a, M0b, q0, M1a, M1b, q1, L);
+    const ms_00 = T0*T0*L, ms_11 = T1*T1*L, ms_10 = T0*T1*L;
+    let mz_22=0, mz_20=0, mz_12=0, ms_22=0, ms_20=0, ms_12=0;
+    if (has2) {
+      mz_22 = integralM(M2a, M2b, q2, M2a, M2b, q2, L);
+      mz_20 = integralM(M0a, M0b, q0, M2a, M2b, q2, L);
+      mz_12 = integralM(M1a, M1b, q1, M2a, M2b, q2, L);
+      ms_22 = T2*T2*L; ms_20 = T0*T2*L; ms_12 = T1*T2*L;
+    }
+    d00 += mz_00/EI + ms_00/GJ;
+    d11 += mz_11/EI + ms_11/GJ;
+    d10 += mz_10/EI + ms_10/GJ;
+    if (has2) {
+      d22 += mz_22/EI + ms_22/GJ;
+      d20 += mz_20/EI + ms_20/GJ;
+      d12 += mz_12/EI + ms_12/GJ;
+    }
+    mzSum00 += mz_00; mzSum11 += mz_11; mzSum10 += mz_10;
+    msSum00 += ms_00; msSum11 += ms_11; msSum10 += ms_10;
+    if (has2) {
+      mzSum22 += mz_22; mzSum20 += mz_20; mzSum12 += mz_12;
+      msSum22 += ms_22; msSum20 += ms_20; msSum12 += ms_12;
+    }
+    perBeam.push({
+      el, L, EI, GJ, has2,
+      M0a, M0b, q0, M1a, M1b, q1, M2a, M2b, q2,
+      T0, T1, T2,
+      mz: {'00': mz_00, '11': mz_11, '10': mz_10, '22': mz_22, '20': mz_20, '12': mz_12},
+      ms: {'00': ms_00, '11': ms_11, '10': ms_10, '22': ms_22, '20': ms_20, '12': ms_12},
+    });
+  }
+  let X1, X2 = null;
+  if (has2) {
+    // Układ 2×2: [d11 d12; d12 d22] [X1; X2] = [-d10; -d20]
+    const det = d11*d22 - d12*d12;
+    if (Math.abs(det) > 1e-15) {
+      X1 = (-d10*d22 + d12*d20) / det;
+      X2 = (-d20*d11 + d12*d10) / det;
+    } else { X1 = 0; X2 = 0; }
+  } else {
+    X1 = Math.abs(d11) > 1e-15 ? -d10/d11 : 0;
+  }
+  const EI_ref = elements[0] ? parseFloat(elements[0].EI) || 1 : 1;
+  const GJ_ref = elements[0] ? parseFloat(elements[0].GJ) || 1 : 1;
+  const uniform = elements.every(el => Math.abs((parseFloat(el.EI)||1) - EI_ref) < 1e-9 && Math.abs((parseFloat(el.GJ)||1) - GJ_ref) < 1e-9);
+  return {
+    delta00: d00, delta11: d11, delta10: d10, delta22: d22, delta20: d20, delta12: d12,
+    X1, X2, has2,
+    perBeam,
+    sums: {mz00: mzSum00, mz11: mzSum11, mz10: mzSum10, mz22: mzSum22, mz20: mzSum20, mz12: mzSum12,
+           ms00: msSum00, ms11: msSum11, ms10: msSum10, ms22: msSum22, ms20: msSum20, ms12: msSum12},
+    EI_ref, GJ_ref, uniform,
+    EI_over_GJ: EI_ref/GJ_ref,
+  };
+}
+
+// Klasyfikacja kształtu wykresu Mz na pręcie
+// Zwraca obiekt {type, ...} typu zero/rectangle/triangleL/triangleR/trapezoid/parabolaPure/composite
+function classifyShape(M1, M2, q, L) {
+  const ref = Math.max(Math.abs(M1), Math.abs(M2), Math.abs(q*L*L/8), 1e-9);
+  const eps = 1e-7 * ref;
+  const m1z = Math.abs(M1) < eps;
+  const m2z = Math.abs(M2) < eps;
+  const qz = Math.abs(q) < eps/L;
+  if (m1z && m2z && qz) return {type: 'zero'};
+  if (qz) {
+    if (m1z) return {type: 'triangleR', a: M2};
+    if (m2z) return {type: 'triangleL', a: M1};
+    if (Math.abs(M1 - M2) < eps) return {type: 'rectangle', a: M1};
+    return {type: 'trapezoid', a: M1, b: M2};
+  }
+  if (m1z && m2z) return {type: 'parabolaPure', peak: q*L*L/8};
+  return {type: 'composite', M1, M2, q, peak: q*L*L/8};
+}
+
+// Wykrywa typ obciążenia stanu na podstawie tego, co użytkownik wpisał:
+// - Stan 0: 'P' (siły skupione), 'q' (rozłożone), 'mixed' lub 'none'
+// - Stan 1/2: 'force' (jednostkowa siła X=1), 'moment' (jednostkowy moment X=1), 'mixed' lub 'none'
+function detectStateType(stateData, elements, isStan0) {
+  const hasFz = stateData.loads.some(l => Math.abs(parseFloat(l.Fz)||0) > 1e-12);
+  const hasMxMy = stateData.loads.some(l =>
+    Math.abs(parseFloat(l.Mx)||0) > 1e-12 || Math.abs(parseFloat(l.My)||0) > 1e-12);
+  const hasQ = elements.some(el => Math.abs(parseFloat(stateData.elementQ?.[el.id])||0) > 1e-12);
+  if (!hasFz && !hasMxMy && !hasQ) return 'none';
+  if (isStan0) {
+    if (hasQ && !hasFz && !hasMxMy) return 'q';
+    if (hasFz && !hasQ && !hasMxMy) return 'P';
+    if (hasMxMy && !hasFz && !hasQ) return 'P'; // moment węzłowy traktujemy jak P (potrzebny by wymiarować)
+    return 'mixed';
+  } else {
+    if (hasFz && !hasMxMy && !hasQ) return 'force';
+    if (hasMxMy && !hasFz && !hasQ) return 'moment';
+    return 'mixed';
+  }
+}
+// Wektor wymiarowości (P^p · q^q · L^l) dla wartości momentu w danym stanie
+function factorForType(type) {
+  if (type === 'P') return {P: 1, Q: 0, L: 1};       // M = P·L  → PL
+  if (type === 'q') return {P: 0, Q: 1, L: 2};       // M = q·L² → qL²
+  if (type === 'force') return {P: 0, Q: 0, L: 1};   // M = 1·L  → L
+  if (type === 'moment') return {P: 0, Q: 0, L: 0};  // M = 1    → (brak)
+  return null;
+}
+const SUP_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+function supChar(n) { return n >= 0 && n < 10 ? SUP_DIGITS[n] : `^${n}`; }
+function formatUnit(P, Q, L, divEI = false) {
+  let s = '';
+  if (P > 0) s += 'P' + (P > 1 ? supChar(P) : '');
+  if (Q > 0) s += 'q' + (Q > 1 ? supChar(Q) : '');
+  if (L > 0) s += 'L' + (L > 1 ? supChar(L) : '');
+  if (divEI) s += '/EJ';
+  return s;
+}
+// Suffiksy symboliczne (bez wiodącej spacji - do użycia inline z liczbą, np. "16L")
+function mSufInline(state, sym) {
+  if (!sym || !sym.enabled || !sym.types) return '';
+  const f = factorForType(sym.types[parseInt(state)]);
+  if (!f) return '';
+  return formatUnit(f.P, f.Q, f.L);
+}
+function lSufInline(sym) {
+  return sym && sym.enabled ? 'L' : '';
+}
+function productSufInline(s0, s1, sym) {
+  if (!sym || !sym.enabled || !sym.types) return '';
+  const f0 = factorForType(sym.types[parseInt(s0)]);
+  const f1 = factorForType(sym.types[parseInt(s1)]);
+  if (!f0 || !f1) return '';
+  // Iloczyn dwóch wykresów scałkowany po długości: jednostka = f0·f1·L
+  return formatUnit(f0.P + f1.P, f0.Q + f1.Q, f0.L + f1.L + 1);
+}
+
+// Generuje opis i numeryczną postać wzoru iloczynu dwóch wykresów (Wereszczagin).
+// Zwraca { description, formula, computation, value, valueSuf }
+function multiplicationFormula(s0, s1, L, sym, state0='', state1='') {
+  const sufL = lSufInline(sym);
+  const suf0 = mSufInline(state0, sym);
+  const suf1 = mSufInline(state1, sym);
+  const valueSuf = state0 && state1 ? productSufInline(state0, state1, sym) : '';
+  const _L = `${fmt(L,2)}${sufL}`;
+  const _A0 = (a) => `${fmt(a,2)}${suf0}`;
+  const _A1 = (a) => `${fmt(a,2)}${suf1}`;
+  // Special case: zero
+  if (s0.type === 'zero' || s1.type === 'zero') {
+    return { description: 'jeden z wykresów = 0', formula: '0', computation: '0', value: 0, valueSuf: '' };
+  }
+  // Linear × Linear: trapezoid×trapezoid general formula
+  if (s0.type !== 'parabolaPure' && s0.type !== 'composite' &&
+      s1.type !== 'parabolaPure' && s1.type !== 'composite') {
+    const a1 = (s0.type === 'rectangle') ? s0.a : (s0.type === 'triangleL') ? s0.a : (s0.type === 'triangleR') ? 0 : s0.a;
+    const b1 = (s0.type === 'rectangle') ? s0.a : (s0.type === 'triangleL') ? 0 : (s0.type === 'triangleR') ? s0.a : s0.b;
+    const a2 = (s1.type === 'rectangle') ? s1.a : (s1.type === 'triangleL') ? s1.a : (s1.type === 'triangleR') ? 0 : s1.a;
+    const b2 = (s1.type === 'rectangle') ? s1.a : (s1.type === 'triangleL') ? 0 : (s1.type === 'triangleR') ? s1.a : s1.b;
+    if (s0.type==='triangleR' && s1.type==='triangleR') {
+      const v = (1/3)*L*s0.a*s1.a;
+      return { description: 'trójkąt × trójkąt (peaki po prawej)', formula: '⅓·s·a·b', computation: `⅓·${_L}·${_A0(s0.a)}·${_A1(s1.a)}`, value: v, valueSuf };
+    }
+    if (s0.type==='triangleL' && s1.type==='triangleL') {
+      const v = (1/3)*L*s0.a*s1.a;
+      return { description: 'trójkąt × trójkąt (peaki po lewej)', formula: '⅓·s·a·b', computation: `⅓·${_L}·${_A0(s0.a)}·${_A1(s1.a)}`, value: v, valueSuf };
+    }
+    if ((s0.type==='triangleL' && s1.type==='triangleR') || (s0.type==='triangleR' && s1.type==='triangleL')) {
+      const v = (1/6)*L*s0.a*s1.a;
+      return { description: 'trójkąt × trójkąt (przeciwne peaki)', formula: '⅙·s·a·b', computation: `⅙·${_L}·${_A0(s0.a)}·${_A1(s1.a)}`, value: v, valueSuf };
+    }
+    if (s0.type==='rectangle' && s1.type==='rectangle') {
+      const v = L*s0.a*s1.a;
+      return { description: 'prostokąt × prostokąt', formula: 's·a·b', computation: `${_L}·${_A0(s0.a)}·${_A1(s1.a)}`, value: v, valueSuf };
+    }
+    if ((s0.type==='rectangle' && (s1.type==='triangleL'||s1.type==='triangleR')) ||
+        (s1.type==='rectangle' && (s0.type==='triangleL'||s0.type==='triangleR'))) {
+      const v = 0.5*L*s0.a*s1.a;
+      const formatRect = s0.type==='rectangle' ? _A0(s0.a) : _A1(s1.a);
+      const formatTri = s0.type==='rectangle' ? _A1(s1.a) : _A0(s0.a);
+      return { description: 'prostokąt × trójkąt', formula: '½·s·a·b', computation: `½·${_L}·${formatRect}·${formatTri}`, value: v, valueSuf };
+    }
+    // Trapez × trapez (ogólny)
+    const v = (L/6) * (2*(a1*a2 + b1*b2) + a1*b2 + b1*a2);
+    const formula = '(s/6)·[2(a·c+b·d)+a·d+b·c]';
+    const computation = `(${_L}/6)·[2·(${_A0(a1)}·${_A1(a2)}+${_A0(b1)}·${_A1(b2)}) + ${_A0(a1)}·${_A1(b2)}+${_A0(b1)}·${_A1(a2)}]`;
+    return { description: 'trapez × trapez', formula, computation, value: v, valueSuf };
+  }
+  // Z parabolą: użyj pełnej całki analitycznej
+  const M0a = s0.type==='parabolaPure' ? 0 : (s0.M1 ?? (s0.type==='triangleL' ? s0.a : s0.type==='triangleR' ? 0 : s0.type==='rectangle' ? s0.a : s0.a||0));
+  const M0b = s0.type==='parabolaPure' ? 0 : (s0.M2 ?? (s0.type==='triangleR' ? s0.a : s0.type==='triangleL' ? 0 : s0.type==='rectangle' ? s0.a : s0.b||0));
+  const M1a = s1.type==='parabolaPure' ? 0 : (s1.M1 ?? (s1.type==='triangleL' ? s1.a : s1.type==='triangleR' ? 0 : s1.type==='rectangle' ? s1.a : s1.a||0));
+  const M1b = s1.type==='parabolaPure' ? 0 : (s1.M2 ?? (s1.type==='triangleR' ? s1.a : s1.type==='triangleL' ? 0 : s1.type==='rectangle' ? s1.a : s1.b||0));
+  const q0 = s0.type==='parabolaPure' || s0.type==='composite' ? s0.q || s0.peak*8/(L*L) : 0;
+  const q1 = s1.type==='parabolaPure' || s1.type==='composite' ? s1.q || s1.peak*8/(L*L) : 0;
+  const v = integralM(M0a, M0b, q0, M1a, M1b, q1, L);
+  return {
+    description: 'wykres z parabolą (q≠0) — całkowanie analityczne',
+    formula: '∫(M₀)·(M₁) dx',
+    computation: `peak parab. = ${fmt((s0.peak||0) + (s1.peak||0), 2)}, wynik analityczny`,
+    value: v,
+    valueSuf
+  };
+}
+
+const EXAMPLES = {
+  zadanie: {
+    name: 'Twoje zadanie (ruszt z przegubem)',
+    nodes: [
+      {id:'A', x:0, y:1},    // utwierdzenie (kwadrat) na górze
+      {id:'B', x:0, y:0},    // przegub O (modelowany jako sztywny - ograniczenie solvera)
+      {id:'C', x:2, y:0},    // utwierdzenie (zakreskowane) z prawej
+      {id:'D', x:0, y:-1},   // dolna jednostka (skrzyzowanie)
+      {id:'E', x:-1, y:-1},  // lewy koniec dolnego poziomu
+      {id:'F', x:1, y:-1},   // prawy koniec dolnego poziomu
+      {id:'G', x:1, y:-2},   // miejsce obciazenia P
+    ],
+    elements: [
+      {id:1, n1:'A', n2:'B', EI:1, GJ:0.77},
+      {id:2, n1:'B', n2:'C', EI:1, GJ:0.77},
+      {id:3, n1:'B', n2:'D', EI:1, GJ:0.77},
+      {id:4, n1:'D', n2:'E', EI:1, GJ:0.77},
+      {id:5, n1:'D', n2:'F', EI:1, GJ:0.77},
+      {id:6, n1:'F', n2:'G', EI:1, GJ:0.77},
+    ],
+    supports: [
+      {node:'A', z:true, rx:true, ry:true},
+      {node:'C', z:true, rx:true, ry:true},
+    ],
+    loads: [
+      {node:'G', Fz:-10, Mx:0, My:0},
+    ],
+  },
+  cantilever: {
+    name: 'Wspornik (kontrola: M=PL)',
+    nodes: [{id:'A',x:0,y:0}, {id:'B',x:4,y:0}],
+    elements: [{id:1, n1:'A', n2:'B', EI:1, GJ:0.77}],
+    supports: [{node:'A', z:true, rx:true, ry:true}],
+    loads: [{node:'B', Fz:-10, Mx:0, My:0}],
+  },
+  lframe: {
+    name: 'Ruszt L (2 pręty)',
+    nodes: [{id:'A',x:0,y:0}, {id:'B',x:4,y:0}, {id:'C',x:4,y:3}],
+    elements: [{id:1,n1:'A',n2:'B',EI:1,GJ:0.77},{id:2,n1:'B',n2:'C',EI:1,GJ:0.77}],
+    supports: [{node:'A', z:true, rx:true, ry:true}],
+    loads: [{node:'C', Fz:-10, Mx:0, My:0}],
+  },
+  hframe: {
+    name: 'Ruszt H (3 podpory)',
+    nodes: [{id:'A',x:0,y:0},{id:'B',x:0,y:4},{id:'C',x:3,y:4},{id:'D',x:3,y:0},{id:'E',x:6,y:4},{id:'F',x:6,y:0}],
+    elements: [
+      {id:1,n1:'A',n2:'B',EI:1,GJ:0.77},{id:2,n1:'B',n2:'C',EI:1,GJ:0.77},
+      {id:3,n1:'C',n2:'D',EI:1,GJ:0.77},{id:4,n1:'C',n2:'E',EI:1,GJ:0.77},
+      {id:5,n1:'E',n2:'F',EI:1,GJ:0.77},
+    ],
+    supports: [
+      {node:'A',z:true,rx:true,ry:true},
+      {node:'F',z:true,rx:true,ry:true},
+      {node:'D',z:true,rx:false,ry:false},
+    ],
+    loads: [{node:'C', Fz:-20, Mx:0, My:0}],
+  },
+};
+
+const fmt = (x, d=2) => {
+  if (x === null || x === undefined || isNaN(x)) return '—';
+  if (Math.abs(x) < 1e-9) return '0';
+  if (Math.abs(x) < 0.01 || Math.abs(x) >= 1e5) return x.toExponential(2);
+  return x.toFixed(d);
+};
+
+const tabBtn = (active) => `px-4 py-2 text-xs font-medium tracking-wide uppercase transition-colors border-b-2 ${active ? 'text-cyan-300 border-cyan-400' : 'text-slate-400 border-transparent hover:text-slate-200'}`;
+const inputCell = 'w-full bg-transparent text-slate-100 px-2 py-1 text-sm font-mono focus:outline-none focus:bg-slate-800 rounded';
+const checkCell = 'w-4 h-4 accent-cyan-400 cursor-pointer';
+const iconBtn = 'p-1.5 text-slate-400 hover:text-rose-400 transition-colors rounded hover:bg-slate-800';
+const addBtn = 'flex items-center gap-1.5 text-xs px-3 py-1.5 text-cyan-300 hover:text-cyan-200 hover:bg-cyan-950/40 rounded transition-colors border border-cyan-900/40';
+
+function StructureView({nodes, elements, supports, loads, results, viewMode, view, setView, momentSuffix}) {
+  const svgRef = useRef(null);
+  const dragRef = useRef(null);
+  const W=760, H=520, padding=70;
+  const is3D = viewMode === 'mz3d' || viewMode === 'ms3d';
+
+  // Wheel handler with passive:false to enable preventDefault
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setView(v => ({...v, zoom: Math.max(0.1, Math.min(20, v.zoom * delta))}));
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, [setView]);
+
+  const getSvgPoint = (e) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width * W,
+      y: (e.clientY - rect.top) / rect.height * H,
+    };
+  };
+
+  const onMouseDown = (e) => {
+    if (e.button !== 0) return;
+    const pt = getSvgPoint(e);
+    const isRotate = is3D && !e.shiftKey;
+    dragRef.current = {
+      startX: pt.x, startY: pt.y,
+      startView: {...view},
+      mode: isRotate ? 'rotate' : 'pan',
+    };
+  };
+
+  const onMouseMove = (e) => {
+    if (!dragRef.current) return;
+    const pt = getSvgPoint(e);
+    const dx = pt.x - dragRef.current.startX;
+    const dy = pt.y - dragRef.current.startY;
+    const sv = dragRef.current.startView;
+    if (dragRef.current.mode === 'pan') {
+      setView({...sv, panX: sv.panX + dx, panY: sv.panY + dy});
+    } else {
+      const newYaw = sv.yaw + (dx / W) * Math.PI * 1.5;
+      const newPitch = Math.max(0.05, Math.min(Math.PI/2 - 0.05, sv.pitch - (dy / H) * Math.PI * 0.8));
+      setView({...sv, yaw: newYaw, pitch: newPitch});
+    }
+  };
+
+  const onMouseUp = () => { dragRef.current = null; };
+
+  if (nodes.length === 0) return <div className="flex items-center justify-center h-full text-slate-500 text-sm">Dodaj węzły, aby zobaczyć schemat</div>;
+
+  const cursor = is3D ? 'grab' : 'move';
+  const svgProps = {
+    ref: svgRef,
+    onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp,
+    style: {cursor, userSelect: 'none'},
+    className: "w-full h-full",
+  };
+
+  // === AXONOMETRIC (3D) RENDERING for mz3d / ms3d ===
+  if (is3D) {
+    const yaw = view.yaw, pitch = view.pitch;
+    const proj = (x, y, z) => {
+      x = -x;
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const xr = x*cy - y*sy;
+      const yr = x*sy + y*cy;
+      const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+      return {px: (xr-yr)*cosP, py: (xr+yr)*sinP - z};
+    };
+
+    let maxM = 0;
+    if (results) results.elementForces.forEach(ef => {
+      if (viewMode==='mz3d') maxM = Math.max(maxM, Math.abs(ef.Mint_left), Math.abs(ef.Mint_right));
+      else maxM = Math.max(maxM, Math.abs(ef.Tint));
+    });
+
+    const baseProj = nodes.map(n => proj(parseFloat(n.x)||0, parseFloat(n.y)||0, 0));
+    let allPx = baseProj.map(p => p.px);
+    let allPy = baseProj.map(p => p.py);
+    const sxMin=Math.min(...allPx), sxMax=Math.max(...allPx);
+    const syMin=Math.min(...allPy), syMax=Math.max(...allPy);
+    const structSize = Math.max(sxMax-sxMin, syMax-syMin, 1);
+    const diagScale = maxM > 0 ? structSize * 0.45 / maxM : 0;
+
+    if (results && diagScale > 0) {
+      results.elementForces.forEach((ef, i) => {
+        const el = elements[i]; if (!el) return;
+        const n1 = nodes.find(n => n.id===el.n1), n2 = nodes.find(n => n.id===el.n2);
+        if (!n1||!n2) return;
+        let M1, M2;
+        if (viewMode==='mz3d') { M1=ef.Mint_left; M2=ef.Mint_right; }
+        else { M1=ef.Tint; M2=ef.Tint; }
+        const x1=parseFloat(n1.x)||0, y1=parseFloat(n1.y)||0;
+        const x2=parseFloat(n2.x)||0, y2=parseFloat(n2.y)||0;
+        const t1=proj(x1,y1,M1*diagScale), t2=proj(x2,y2,M2*diagScale);
+        allPx.push(t1.px, t2.px); allPy.push(t1.py, t2.py);
+      });
+    }
+
+    const pxMin=Math.min(...allPx), pxMax=Math.max(...allPx);
+    const pyMin=Math.min(...allPy), pyMax=Math.max(...allPy);
+    const pdx=(pxMax-pxMin)||1, pdy=(pyMax-pyMin)||1;
+    const sc = Math.min((W-2*padding)/pdx, (H-2*padding)/pdy);
+    const ccx=(pxMin+pxMax)/2, ccy=(pyMin+pyMax)/2;
+    const ps = (x,y,z) => { const p=proj(x,y,z); return [W/2+view.zoom*sc*(p.px-ccx)+view.panX, H/2+view.zoom*sc*(p.py-ccy)+view.panY]; };
+
+    const dColor = viewMode==='mz3d' ? '#22d3ee' : '#fb923c';
+    const dFill = viewMode==='mz3d' ? 'rgba(34,211,238,0.30)' : 'rgba(251,146,60,0.30)';
+
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} {...svgProps}>
+        <defs><pattern id="grid3d" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e293b" strokeWidth="0.5"/></pattern></defs>
+        <rect width={W} height={H} fill="url(#grid3d)"/>
+
+        {/* Coordinate axes indicator */}
+        <g transform={`translate(50, ${H-50})`}>
+          {(() => {
+            const L = 26;
+            const xv = proj(1,0,0), yv = proj(0,1,0), zv = proj(0,0,1);
+            return <>
+              <line x1="0" y1="0" x2={L*xv.px} y2={L*xv.py} stroke="#94a3b8" strokeWidth="1.5"/>
+              <text x={L*xv.px+5} y={L*xv.py+4} fill="#94a3b8" fontSize="11" fontFamily="monospace">x</text>
+              <line x1="0" y1="0" x2={L*yv.px} y2={L*yv.py} stroke="#94a3b8" strokeWidth="1.5"/>
+              <text x={L*yv.px-12} y={L*yv.py+4} fill="#94a3b8" fontSize="11" fontFamily="monospace">y</text>
+              <line x1="0" y1="0" x2={L*zv.px} y2={L*zv.py} stroke="#94a3b8" strokeWidth="1.5"/>
+              <text x={L*zv.px+5} y={L*zv.py+4} fill="#94a3b8" fontSize="11" fontFamily="monospace">z</text>
+              <circle cx="0" cy="0" r="2" fill="#94a3b8"/>
+            </>;
+          })()}
+        </g>
+
+        {/* Mode label */}
+        <g transform={`translate(${W-30}, 30)`}>
+          <text textAnchor="end" fill={dColor} fontSize="14" fontFamily="monospace" fontWeight="bold">
+            {viewMode==='mz3d' ? 'WYKRES Mz · aksonometria' : 'WYKRES Ms · aksonometria'}
+          </text>
+          {maxM > 0 && <text textAnchor="end" x="0" y="16" fill="#64748b" fontSize="10" fontFamily="monospace">max = {fmt(maxM, 2)}{momentSuffix||''}</text>}
+        </g>
+
+        {/* Diagram polygons (rendered first so structure shows on top) */}
+        {results && diagScale > 0 && elements.map((el, i) => {
+          const ef = results.elementForces[i]; if (!ef) return null;
+          const n1 = nodes.find(n => n.id===el.n1), n2 = nodes.find(n => n.id===el.n2);
+          if (!n1||!n2) return null;
+          let M1, M2;
+          if (viewMode==='mz3d') { M1=ef.Mint_left; M2=ef.Mint_right; }
+          else { M1=ef.Tint; M2=ef.Tint; }
+          const x1=parseFloat(n1.x)||0, y1=parseFloat(n1.y)||0;
+          const x2=parseFloat(n2.x)||0, y2=parseFloat(n2.y)||0;
+          const Lreal=ef.L, q=(viewMode==='mz3d') ? (ef.q||0) : 0;
+          const [b1x, b1y] = ps(x1,y1,0), [b2x, b2y] = ps(x2,y2,0);
+          const [t1x, t1y] = ps(x1,y1,M1*diagScale), [t2x, t2y] = ps(x2,y2,M2*diagScale);
+          const lo1 = M1>=0 ? -7 : 16, lo2 = M2>=0 ? -7 : 16;
+          const segs = q !== 0 ? 24 : 1;
+          const tops = [];
+          let Mmax = M1, pMaxX = t1x, pMaxY = t1y;
+          for (let k=0; k<=segs; k++){
+            const xi = k/segs;
+            const xL = xi*Lreal;
+            const M = M1*(1-xi) + M2*xi + q*xL*(Lreal-xL)/2;
+            const xx = x1 + (x2-x1)*xi;
+            const yy = y1 + (y2-y1)*xi;
+            const [px, py] = ps(xx, yy, M*diagScale);
+            tops.push(`${px},${py}`);
+            if (q !== 0 && Math.abs(M) > Math.abs(Mmax)) { Mmax = M; pMaxX = px; pMaxY = py; }
+          }
+          const polyPoints = `${b1x},${b1y} ${tops.join(' ')} ${b2x},${b2y}`;
+          const loMax = Mmax>=0 ? -7 : 16;
+          return (
+            <g key={`d3d-${el.id}`}>
+              <polygon points={polyPoints} fill={dFill} stroke={dColor} strokeWidth="1.2"/>
+              <line x1={b1x} y1={b1y} x2={t1x} y2={t1y} stroke={dColor} strokeWidth="1.2"/>
+              <line x1={b2x} y1={b2y} x2={t2x} y2={t2y} stroke={dColor} strokeWidth="1.2"/>
+              {Math.abs(M1)>1e-6 && <text x={t1x} y={t1y+lo1} textAnchor="middle" fill={dColor} fontSize="11" fontFamily="monospace" fontWeight="bold">{fmt(M1, 2)}{momentSuffix||''}</text>}
+              {Math.abs(M2)>1e-6 && viewMode==='mz3d' && <text x={t2x} y={t2y+lo2} textAnchor="middle" fill={dColor} fontSize="11" fontFamily="monospace" fontWeight="bold">{fmt(M2, 2)}{momentSuffix||''}</text>}
+              {q !== 0 && Math.abs(Mmax-M1)>1e-3 && Math.abs(Mmax-M2)>1e-3 && Math.abs(Mmax)>0.01 && (
+                <g>
+                  <circle cx={pMaxX} cy={pMaxY} r="2" fill={dColor}/>
+                  <text x={pMaxX} y={pMaxY+loMax} textAnchor="middle" fill={dColor} fontSize="10" fontFamily="monospace" fontStyle="italic">{fmt(Mmax,2)}{momentSuffix||''}</text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Structure beams */}
+        {elements.map(el => {
+          const n1 = nodes.find(n => n.id===el.n1), n2 = nodes.find(n => n.id===el.n2);
+          if (!n1||!n2) return null;
+          const [x1, y1] = ps(parseFloat(n1.x)||0, parseFloat(n1.y)||0, 0);
+          const [x2, y2] = ps(parseFloat(n2.x)||0, parseFloat(n2.y)||0, 0);
+          return <line key={`b3d-${el.id}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#cbd5e1" strokeWidth="2.8"/>;
+        })}
+
+        {/* Nodes */}
+        {nodes.map(node => {
+          const [px, py] = ps(parseFloat(node.x)||0, parseFloat(node.y)||0, 0);
+          return (
+            <g key={`n3d-${node.id}`}>
+              <circle cx={px} cy={py} r="5" fill="#0f172a" stroke="#22d3ee" strokeWidth="1.5"/>
+              <text x={px+10} y={py+16} fill="#22d3ee" fontSize="11" fontWeight="bold" fontFamily="monospace">{node.id}</text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }
+  // === END AXONOMETRIC ===
+
+  const xs = nodes.map(n => parseFloat(n.x)||0), ys = nodes.map(n => parseFloat(n.y)||0);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs), ymin=Math.min(...ys), ymax=Math.max(...ys);
+  const dx=(xmax-xmin)||1, dy=(ymax-ymin)||1;
+  const scale = Math.min((W-2*padding)/dx, (H-2*padding)/dy);
+  const cx=(xmin+xmax)/2, cy=(ymin+ymax)/2;
+  const tx = x => W/2 + view.zoom*scale*(x-cx) + view.panX;
+  const ty = y => H/2 - view.zoom*scale*(y-cy) + view.panY;
+
+  const supMap = {}; supports.forEach(s => supMap[s.node]=s);
+  const loadMap = {};
+  loads.forEach(l => {
+    if (!loadMap[l.node]) loadMap[l.node]={Fz:0,Mx:0,My:0};
+    loadMap[l.node].Fz += parseFloat(l.Fz)||0;
+    loadMap[l.node].Mx += parseFloat(l.Mx)||0;
+    loadMap[l.node].My += parseFloat(l.My)||0;
+  });
+
+  let diagScale=0, maxVal=0;
+  if (results && (viewMode==='mz' || viewMode==='ms')) {
+    results.elementForces.forEach(ef => {
+      if (viewMode==='mz') maxVal = Math.max(maxVal, Math.abs(ef.Mint_left), Math.abs(ef.Mint_right));
+      else if (viewMode==='ms') maxVal = Math.max(maxVal, Math.abs(ef.Tint));
+    });
+    if (maxVal > 0) diagScale = Math.min(W,H)*0.18 / maxVal;
+  }
+
+  const diagColor = viewMode==='mz' ? '#22d3ee' : '#fb923c';
+  const diagFill = viewMode==='mz' ? 'rgba(34,211,238,0.22)' : 'rgba(251,146,60,0.22)';
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} {...svgProps}>
+      <defs>
+        <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e293b" strokeWidth="0.5"/>
+        </pattern>
+        <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="6" stroke="#94a3b8" strokeWidth="1"/>
+        </pattern>
+        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+          <polygon points="0 0, 10 3, 0 6" fill="#22d3ee"/>
+        </marker>
+        <marker id="qArrow" markerWidth="6" markerHeight="6" refX="5" refY="2" orient="auto">
+          <polygon points="0 0, 5 2, 0 4" fill="#fb923c"/>
+        </marker>
+      </defs>
+      <rect width={W} height={H} fill="url(#grid)"/>
+      <g transform={`translate(30, ${H-30})`}>
+        <line x1="0" y1="0" x2="22" y2="0" stroke="#475569" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+        <line x1="0" y1="0" x2="0" y2="-22" stroke="#475569" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+        <text x="28" y="4" fill="#64748b" fontSize="10" fontFamily="monospace">x</text>
+        <text x="-4" y="-26" fill="#64748b" fontSize="10" fontFamily="monospace">y</text>
+        <circle cx="0" cy="0" r="3" fill="none" stroke="#475569" strokeWidth="1"/>
+        <circle cx="0" cy="0" r="0.8" fill="#475569"/>
+        <text x="6" y="-6" fill="#64748b" fontSize="9" fontFamily="monospace">z↑</text>
+      </g>
+      <g transform={`translate(${W-30}, 30)`}>
+        <text textAnchor="end" fill={viewMode==='structure'?'#64748b':diagColor} fontSize="14" fontFamily="monospace" fontWeight="bold">
+          {viewMode==='structure' && 'SCHEMAT'}
+          {viewMode==='mz' && 'WYKRES Mz'}
+          {viewMode==='ms' && 'WYKRES Ms'}
+        </text>
+        {(viewMode==='mz'||viewMode==='ms') && maxVal>0 && (
+          <text textAnchor="end" x="0" y="16" fill="#64748b" fontSize="10" fontFamily="monospace">max = {fmt(maxVal,2)}{momentSuffix||''}</text>
+        )}
+      </g>
+      {elements.map(el => {
+        const n1=nodes.find(n=>n.id===el.n1), n2=nodes.find(n=>n.id===el.n2);
+        if (!n1||!n2) return null;
+        const x1=tx(parseFloat(n1.x)||0), y1=ty(parseFloat(n1.y)||0);
+        const x2=tx(parseFloat(n2.x)||0), y2=ty(parseFloat(n2.y)||0);
+        const mx=(x1+x2)/2, my=(y1+y2)/2;
+        return (
+          <g key={`el-${el.id}`}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#475569" strokeWidth="2.5"/>
+            {viewMode==='structure' && (<>
+              <circle cx={mx} cy={my} r="9" fill="#0f172a" stroke="#334155" strokeWidth="1"/>
+              <text x={mx} y={my+3} textAnchor="middle" fill="#94a3b8" fontSize="9" fontFamily="monospace">{el.id}</text>
+            </>)}
+          </g>
+        );
+      })}
+      {/* Wskaźniki obciążenia ciągłego q na prętach */}
+      {viewMode==='structure' && elements.map(el => {
+        const q = parseFloat(el.q) || 0;
+        if (q === 0) return null;
+        const n1=nodes.find(n=>n.id===el.n1), n2=nodes.find(n=>n.id===el.n2);
+        if (!n1||!n2) return null;
+        const x1=tx(parseFloat(n1.x)||0), y1=ty(parseFloat(n1.y)||0);
+        const x2=tx(parseFloat(n2.x)||0), y2=ty(parseFloat(n2.y)||0);
+        const ex=x2-x1, ey=y2-y1, L=Math.sqrt(ex*ex+ey*ey);
+        if (L<1e-6) return null;
+        const nx=ey/L, ny=-ex/L;
+        const dashes = [];
+        const numDashes = Math.max(5, Math.floor(L/16));
+        const dashLen = 8;
+        for (let k=0; k<=numDashes; k++){
+          const t = k/numDashes;
+          const cx = x1 + ex*t, cy = y1 + ey*t;
+          const ax = cx + nx*dashLen, ay = cy + ny*dashLen;
+          dashes.push({cx, cy, ax, ay, k});
+        }
+        const qColor = q < 0 ? '#fb923c' : '#a78bfa';
+        const labX = (x1+x2)/2 + nx*16;
+        const labY = (y1+y2)/2 + ny*16 + 4;
+        return (
+          <g key={`q-${el.id}`}>
+            {dashes.map(d => (
+              <line key={`q${el.id}-${d.k}`} x1={d.cx} y1={d.cy} x2={d.ax} y2={d.ay} stroke={qColor} strokeWidth="1.3" markerEnd="url(#qArrow)" opacity="0.85"/>
+            ))}
+            <text x={labX} y={labY} textAnchor="middle" fill={qColor} fontSize="11" fontFamily="monospace" fontWeight="bold">q={fmt(q,2)}</text>
+          </g>
+        );
+      })}
+      {results && viewMode==='mz' && diagScale>0 && elements.map((el,i) => {
+        const ef=results.elementForces[i]; if (!ef) return null;
+        const n1=nodes.find(n=>n.id===el.n1), n2=nodes.find(n=>n.id===el.n2);
+        if (!n1||!n2) return null;
+        const x1=tx(parseFloat(n1.x)||0), y1=ty(parseFloat(n1.y)||0);
+        const x2=tx(parseFloat(n2.x)||0), y2=ty(parseFloat(n2.y)||0);
+        const ex=x2-x1, ey=y2-y1, L=Math.sqrt(ex*ex+ey*ey);
+        const nx=ey/L, ny=-ex/L;
+        const M1=ef.Mint_left, M2=ef.Mint_right;
+        const Lreal=ef.L, q=ef.q||0;
+        const p1x=x1+nx*M1*diagScale, p1y=y1+ny*M1*diagScale;
+        const p2x=x2+nx*M2*diagScale, p2y=y2+ny*M2*diagScale;
+        // Wykres paraboliczny dla q != 0: M(x) = M1*(1-ξ) + M2*ξ + q*x*(L-x)/2
+        const segs = q !== 0 ? 24 : 1;
+        const tops = [];
+        let Mmax = M1, xMax = 0, pMaxX = p1x, pMaxY = p1y;
+        for (let k=0; k<=segs; k++){
+          const xi = k/segs;
+          const xL = xi*Lreal;
+          const M = M1*(1-xi) + M2*xi + q*xL*(Lreal-xL)/2;
+          const px = x1 + ex*xi + nx*M*diagScale;
+          const py = y1 + ey*xi + ny*M*diagScale;
+          tops.push(`${px},${py}`);
+          if (q !== 0 && Math.abs(M) > Math.abs(Mmax)) { Mmax = M; xMax = xi; pMaxX = px; pMaxY = py; }
+        }
+        const polyPoints = `${x1},${y1} ${tops.join(' ')} ${x2},${y2}`;
+        return (
+          <g key={`mz-${el.id}`}>
+            <polygon points={polyPoints} fill={diagFill} stroke={diagColor} strokeWidth="1.2"/>
+            <line x1={x1} y1={y1} x2={p1x} y2={p1y} stroke={diagColor} strokeWidth="0.8" strokeDasharray="2,2"/>
+            <line x1={x2} y1={y2} x2={p2x} y2={p2y} stroke={diagColor} strokeWidth="0.8" strokeDasharray="2,2"/>
+            <text x={p1x+nx*8} y={p1y+ny*8+4} textAnchor="middle" fill={diagColor} fontSize="11" fontFamily="monospace" fontWeight="bold">{fmt(M1,2)}{momentSuffix||''}</text>
+            <text x={p2x+nx*8} y={p2y+ny*8+4} textAnchor="middle" fill={diagColor} fontSize="11" fontFamily="monospace" fontWeight="bold">{fmt(M2,2)}{momentSuffix||''}</text>
+            {q !== 0 && Math.abs(Mmax-M1)>1e-3 && Math.abs(Mmax-M2)>1e-3 && Math.abs(Mmax)>0.01 && (
+              <g>
+                <circle cx={pMaxX} cy={pMaxY} r="2" fill={diagColor}/>
+                <text x={pMaxX+nx*10} y={pMaxY+ny*10+4} textAnchor="middle" fill={diagColor} fontSize="10" fontFamily="monospace" fontStyle="italic">{fmt(Mmax,2)}{momentSuffix||''}</text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+      {results && viewMode==='ms' && diagScale>0 && elements.map((el,i) => {
+        const ef=results.elementForces[i]; if (!ef) return null;
+        const n1=nodes.find(n=>n.id===el.n1), n2=nodes.find(n=>n.id===el.n2);
+        if (!n1||!n2) return null;
+        const x1=tx(parseFloat(n1.x)||0), y1=ty(parseFloat(n1.y)||0);
+        const x2=tx(parseFloat(n2.x)||0), y2=ty(parseFloat(n2.y)||0);
+        const ex=x2-x1, ey=y2-y1, L=Math.sqrt(ex*ex+ey*ey);
+        const nx=ey/L, ny=-ex/L;
+        const Tval=ef.Tint, off=Tval*diagScale;
+        const p1x=x1+nx*off, p1y=y1+ny*off, p2x=x2+nx*off, p2y=y2+ny*off;
+        const midx=(p1x+p2x)/2, midy=(p1y+p2y)/2;
+        return (
+          <g key={`ms-${el.id}`}>
+            <polygon points={`${x1},${y1} ${p1x},${p1y} ${p2x},${p2y} ${x2},${y2}`} fill={diagFill} stroke={diagColor} strokeWidth="1.2"/>
+            <line x1={x1} y1={y1} x2={p1x} y2={p1y} stroke={diagColor} strokeWidth="0.8" strokeDasharray="2,2"/>
+            <line x1={x2} y1={y2} x2={p2x} y2={p2y} stroke={diagColor} strokeWidth="0.8" strokeDasharray="2,2"/>
+            <text x={midx+nx*10} y={midy+ny*10+4} textAnchor="middle" fill={diagColor} fontSize="11" fontFamily="monospace" fontWeight="bold">{fmt(Tval,2)}{momentSuffix||''}</text>
+          </g>
+        );
+      })}
+      {nodes.map(node => {
+        const sup=supMap[node.id]; if (!sup) return null;
+        const px=tx(parseFloat(node.x)||0), py=ty(parseFloat(node.y)||0);
+        const fixedAll = sup.z && sup.rx && sup.ry, onlyZ = sup.z && !sup.rx && !sup.ry;
+        return (
+          <g key={`sup-${node.id}`}>
+            {fixedAll && <rect x={px-14} y={py-14} width="28" height="28" fill="url(#hatch)" stroke="#94a3b8" strokeWidth="1"/>}
+            {onlyZ && (<>
+              <polygon points={`${px},${py} ${px-10},${py+16} ${px+10},${py+16}`} fill="none" stroke="#94a3b8" strokeWidth="1.5"/>
+              <line x1={px-14} y1={py+18} x2={px+14} y2={py+18} stroke="#94a3b8" strokeWidth="1"/>
+            </>)}
+            {!fixedAll && !onlyZ && <circle cx={px} cy={py} r="13" fill="none" stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,2"/>}
+          </g>
+        );
+      })}
+      {nodes.map(node => {
+        const px=tx(parseFloat(node.x)||0), py=ty(parseFloat(node.y)||0);
+        return (
+          <g key={`node-${node.id}`}>
+            <circle cx={px} cy={py} r="5" fill="#0f172a" stroke="#22d3ee" strokeWidth="1.5"/>
+            <text x={px+9} y={py-9} fill="#22d3ee" fontSize="11" fontWeight="bold" fontFamily="monospace">{node.id}</text>
+          </g>
+        );
+      })}
+      {viewMode==='structure' && nodes.map(node => {
+        const ld=loadMap[node.id]; if (!ld) return null;
+        const px=tx(parseFloat(node.x)||0), py=ty(parseFloat(node.y)||0);
+        const items=[];
+        if (Math.abs(ld.Fz)>1e-9) {
+          const sym = ld.Fz<0 ? '⊗' : '⊙';
+          items.push(<g key="fz">
+            <text x={px-18} y={py-14} fill="#fb923c" fontSize="18" fontWeight="bold">{sym}</text>
+            <text x={px-35} y={py-2} fill="#fb923c" fontSize="10" fontFamily="monospace">{fmt(ld.Fz,1)}</text>
+          </g>);
+        }
+        if (Math.abs(ld.Mx)>1e-9 || Math.abs(ld.My)>1e-9) {
+          items.push(<text key="m" x={px+12} y={py+22} fill="#a78bfa" fontSize="9" fontFamily="monospace">M({fmt(ld.Mx,1)},{fmt(ld.My,1)})</text>);
+        }
+        return <g key={`load-${node.id}`}>{items}</g>;
+      })}
+    </svg>
+  );
+}
+
+// Mini-wykres Mz dla pojedynczego pręta - SVG z wartościami przy końcach
+function MiniDiagram({M1, M2, q, L, color='#22d3ee', suffix='', title=''}) {
+  const w = 110, h = 70;
+  const pad = 10;
+  const baseY = h * 0.6;
+  const segs = Math.abs(q) > 1e-9 ? 14 : 1;
+  // Compute all M values to find scale
+  const Ms = [];
+  for (let k=0; k<=segs; k++) {
+    const xi = k/segs, xL = xi*L;
+    Ms.push(M1*(1-xi) + M2*xi + q*xL*(L-xL)/2);
+  }
+  const maxAbs = Math.max(Math.abs(M1), Math.abs(M2), ...Ms.map(Math.abs), 1e-9);
+  const yScale = (h*0.4) / maxAbs;
+  const pts = [[pad, baseY]];
+  for (let k=0; k<=segs; k++) {
+    const xi = k/segs, xL = xi*L;
+    const M = M1*(1-xi) + M2*xi + q*xL*(L-xL)/2;
+    pts.push([pad + xi*(w-2*pad), baseY - M*yScale]);
+  }
+  pts.push([w-pad, baseY]);
+  const polyStr = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  // Find peak for parabolic case
+  let peakInfo = null;
+  if (Math.abs(q) > 1e-9) {
+    let pkM = M1, pkXi = 0;
+    Ms.forEach((m,k) => { if (Math.abs(m) > Math.abs(pkM)) { pkM = m; pkXi = k/segs; } });
+    if (Math.abs(pkM - M1) > 1e-3 && Math.abs(pkM - M2) > 1e-3) {
+      peakInfo = {x: pad + pkXi*(w-2*pad), y: baseY - pkM*yScale, val: pkM};
+    }
+  }
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-slate-950/60 rounded">
+      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#475569" strokeWidth="1.5"/>
+      <polygon points={polyStr} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
+      <line x1={pad} y1={baseY} x2={pad} y2={baseY - M1*yScale} stroke={color} strokeWidth="1"/>
+      <line x1={w-pad} y1={baseY} x2={w-pad} y2={baseY - M2*yScale} stroke={color} strokeWidth="1"/>
+      {Math.abs(M1) > 1e-9 && <text x={pad+2} y={baseY - M1*yScale + (M1>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(M1,2)}{suffix}</text>}
+      {Math.abs(M2) > 1e-9 && <text x={w-pad-2} y={baseY - M2*yScale + (M2>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(M2,2)}{suffix}</text>}
+      {peakInfo && <>
+        <circle cx={peakInfo.x} cy={peakInfo.y} r="2" fill={color}/>
+        <text x={peakInfo.x} y={peakInfo.y + (peakInfo.val>=0 ? -4 : 11)} fontSize="9" fill={color} fontFamily="monospace" textAnchor="middle">{fmt(peakInfo.val,2)}{suffix}</text>
+      </>}
+      {title && <text x={w/2} y={h-2} fontSize="9" fill="#64748b" fontFamily="monospace" textAnchor="middle">{title}</text>}
+    </svg>
+  );
+}
+
+// Mini-wykres Ms (stałe wzdłuż pręta) - prostokąt
+function MiniRect({T, L, color='#fb923c', suffix='', title=''}) {
+  const w = 110, h = 70;
+  const pad = 10;
+  const baseY = h * 0.5;
+  const maxAbs = Math.max(Math.abs(T), 1e-9);
+  const yScale = (h*0.3) / maxAbs;
+  const top = baseY - T*yScale;
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-slate-950/60 rounded">
+      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#475569" strokeWidth="1.5"/>
+      {Math.abs(T) > 1e-9 && <>
+        <rect x={pad} y={Math.min(baseY, top)} width={w-2*pad} height={Math.abs(top-baseY)} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
+        <text x={pad+2} y={top + (T>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(T,2)}{suffix}</text>
+        <text x={w-pad-2} y={top + (T>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(T,2)}{suffix}</text>
+      </>}
+      {title && <text x={w/2} y={h-2} fontSize="9" fill="#64748b" fontFamily="monospace" textAnchor="middle">{title}</text>}
+    </svg>
+  );
+}
+
+// Panel rozkładu Wereszczagina dla wybranej pary stanów
+function WereshchaginPanel({deltas, pairKey, label, sym}) {
+  if (!deltas?.perBeam) return null;
+  const i0 = pairKey[0], i1 = pairKey[1];
+  const sufM0 = mSufInline(i0, sym);
+  const sufM1 = mSufInline(i1, sym);
+  const sufL = lSufInline(sym);
+  const sufProd = productSufInline(i0, i1, sym);
+  // Iteracja po prętach, generacja per-beam description
+  const beamPanels = deltas.perBeam.map((b, idx) => {
+    const pickM = (st) => st==='0' ? {a: b.M0a, bb: b.M0b, q: b.q0} :
+                          st==='1' ? {a: b.M1a, bb: b.M1b, q: b.q1} :
+                                     {a: b.M2a||0, bb: b.M2b||0, q: b.q2||0};
+    const pickT = (st) => st==='0' ? b.T0 : st==='1' ? b.T1 : (b.T2||0);
+    const v0 = pickM(i0), v1 = pickM(i1);
+    const M0a = v0.a, M0b = v0.bb, q0 = v0.q;
+    const M1a = v1.a, M1b = v1.bb, q1 = v1.q;
+    const T0 = pickT(i0), T1 = pickT(i1);
+    const s0 = classifyShape(M0a, M0b, q0, b.L);
+    const s1 = classifyShape(M1a, M1b, q1, b.L);
+    const mzInfo = multiplicationFormula(s0, s1, b.L, sym, i0, i1);
+    const msVal = T0 * T1 * b.L;
+    const colorMz0 = '#22d3ee', colorMz1 = '#a78bfa';
+    const colorMs0 = '#fb923c', colorMs1 = '#f472b6';
+    return (
+      <div key={`b${idx}`} className="bg-slate-900/60 rounded-lg p-3 border border-slate-800">
+        <div className="text-[11px] font-mono text-slate-300 mb-2">
+          <span className="text-cyan-300 font-semibold">Pręt {b.el.id}</span> ({b.el.n1}→{b.el.n2}, s = {fmt(b.L,2)}{sufL})
+          <span className="text-slate-500 ml-2">EJ={fmt(b.EI,2)}, GC={fmt(b.GJ,2)}</span>
+        </div>
+        {(Math.abs(M0a)+Math.abs(M0b)+Math.abs(q0)+Math.abs(M1a)+Math.abs(M1b)+Math.abs(q1)) > 1e-9 ? (
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <MiniDiagram M1={M0a} M2={M0b} q={q0} L={b.L} color={colorMz0} title={`Mz${i0}`} suffix={sufM0}/>
+            <span className="text-slate-400 text-xl">×</span>
+            <MiniDiagram M1={M1a} M2={M1b} q={q1} L={b.L} color={colorMz1} title={`Mz${i1}`} suffix={sufM1}/>
+            <span className="text-slate-400">=</span>
+            <div className="text-xs font-mono text-slate-200">
+              <div className="text-[10px] text-slate-500">{mzInfo.description}</div>
+              <div>{mzInfo.formula} = {mzInfo.computation} = <span className="text-emerald-300 font-bold">{fmt(mzInfo.value,3)}{sufProd}</span></div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-slate-600 italic mb-2">Mz = 0 na tym pręcie</div>
+        )}
+        {(Math.abs(T0)+Math.abs(T1)) > 1e-9 ? (
+          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800/60">
+            <MiniRect T={T0} L={b.L} color={colorMs0} title={`Ms${i0}`} suffix={sufM0}/>
+            <span className="text-slate-400 text-xl">×</span>
+            <MiniRect T={T1} L={b.L} color={colorMs1} title={`Ms${i1}`} suffix={sufM1}/>
+            <span className="text-slate-400">=</span>
+            <div className="text-xs font-mono text-slate-200">
+              <div className="text-[10px] text-slate-500">prostokąt × prostokąt</div>
+              <div>s·a·b = {fmt(b.L,2)}{sufL}·{fmt(T0,2)}{sufM0}·{fmt(T1,2)}{sufM1} = <span className="text-emerald-300 font-bold">{fmt(msVal,3)}{sufProd}</span></div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-slate-600 italic">Ms = 0 na tym pręcie</div>
+        )}
+      </div>
+    );
+  });
+
+  const sums = deltas.sums;
+  const mzSum = sums[`mz${pairKey}`] || 0;
+  const msSum = sums[`ms${pairKey}`] || 0;
+  // Mapowanie pairKey → klucz w deltas
+  const totalKeyMap = {'00':'delta00', '11':'delta11', '10':'delta10', '22':'delta22', '20':'delta20', '12':'delta12'};
+  const total = deltas[totalKeyMap[pairKey]] || 0;
+  const sub = pairKey.split('').map(c => c==='0'?'₀':c==='1'?'₁':'₂').join('');
+  // Sufiks dla wartości końcowej δ (po podzieleniu przez EJ): jednostka_pary/EJ
+  const totalSuf = (() => {
+    if (!sym || !sym.enabled || !sym.types) return '';
+    const f0 = factorForType(sym.types[parseInt(i0)]);
+    const f1 = factorForType(sym.types[parseInt(i1)]);
+    if (!f0 || !f1) return '';
+    return formatUnit(f0.P + f1.P, f0.Q + f1.Q, f0.L + f1.L + 1, true);
+  })();
+  return (
+    <div className="bg-slate-950/40 border border-emerald-800/40 rounded-lg p-4 mt-3">
+      <div className="text-xs uppercase tracking-wider text-emerald-300 mb-3 font-semibold flex items-center gap-3 flex-wrap">
+        <span>{label}</span>
+        <span className="bg-amber-950/40 border border-amber-700/40 rounded px-2 py-0.5 normal-case tracking-normal text-amber-200 font-mono">EJ/GC = {fmt(deltas.EI_over_GJ, 3)}</span>
+      </div>
+      <div className="font-mono text-sm text-slate-200 mb-3">
+        δ<sub>{sub}</sub> = (1/EJ) · [∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds + <span className="text-amber-300">(EJ/GC)</span> · ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds] = (1/EJ) · [∫Mz·Mz ds + <span className="text-amber-300">{fmt(deltas.EI_over_GJ, 3)}</span> · ∫Ms·Ms ds]
+      </div>
+      <div className="space-y-3">
+        {beamPanels}
+      </div>
+      <div className="mt-4 pt-3 border-t border-slate-800 font-mono text-sm space-y-1">
+        <div className="text-slate-300">∑ ∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds = <span className="text-emerald-300">{fmt(mzSum, 4)}{sufProd}</span></div>
+        <div className="text-slate-300">∑ ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds = <span className="text-emerald-300">{fmt(msSum, 4)}{sufProd}</span></div>
+        {deltas.uniform ? (
+          <div className="text-slate-200 mt-2">
+            δ<sub>{sub}</sub> = (1/{fmt(deltas.EI_ref,2)}) · [{fmt(mzSum,4)}{sufProd} + {fmt(deltas.EI_over_GJ,3)} · {fmt(msSum,4)}{sufProd}] = <span className="text-emerald-200 font-bold text-base">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span>
+          </div>
+        ) : (
+          <div className="text-slate-200 mt-2">
+            δ<sub>{sub}</sub> = <span className="text-emerald-200 font-bold text-base">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span> <span className="text-slate-500 text-xs">(różne EJ/GC po prętach – sumacja składowa)</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [nodes, setNodes] = useState(EXAMPLES.zadanie.nodes);
+  const [elements, setElements] = useState(EXAMPLES.zadanie.elements.map(el => { const {q, ...rest} = el; return rest; }));
+  const [supports, setSupports] = useState(EXAMPLES.zadanie.supports);
+  const [activeState, setActiveState] = useState(0);
+  const [statesData, setStatesData] = useState(() => {
+    const exQ = {};
+    EXAMPLES.zadanie.elements.forEach(el => { if (el.q) exQ[el.id] = parseFloat(el.q) || 0; });
+    return [
+      {loads: EXAMPLES.zadanie.loads.map(l => ({...l})), elementQ: exQ},
+      {loads: [], elementQ: {}},
+      {loads: [], elementQ: {}}
+    ];
+  });
+  const loads = statesData[activeState].loads;
+  const setLoads = (val) => setStatesData(prev => prev.map((s,i) => i===activeState ? {...s, loads: typeof val==='function' ? val(s.loads) : val} : s));
+  const getQ = (id) => parseFloat(statesData[activeState].elementQ[id]) || 0;
+  const setQ = (id, val) => setStatesData(prev => prev.map((s,i) => i===activeState ? {...s, elementQ: {...s.elementQ, [id]: val}} : s));
+  const [activeTab, setActiveTab] = useState('nodes');
+  const [resultsTab, setResultsTab] = useState('forces');
+  const [viewMode, setViewMode] = useState('structure');
+  const DEFAULT_VIEW = { zoom: 1, panX: 0, panY: 0, yaw: 0, pitch: Math.PI/6 };
+  const [view, setView] = useState(DEFAULT_VIEW);
+  const resetView = () => setView({...DEFAULT_VIEW});
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [wereszczaginShow, setWereszczaginShow] = useState(null); // null | '00' | '11' | '10'
+  const [symbolic, setSymbolic] = useState({enabled: false});
+  // Globalna proporcja EJ/GC stosowana do wszystkich prętów. Domyślnie 1.3 (typowe dla rusztu stalowego)
+  const [ejGcRatio, setEjGcRatioState] = useState(() => {
+    const initEls = EXAMPLES.zadanie.elements;
+    if (!initEls.length) return 1.3;
+    const ei = parseFloat(initEls[0].EI) || 1;
+    const gj = parseFloat(initEls[0].GJ) || 1;
+    return ei / gj;
+  });
+  // Zmiana ratio nadpisuje GJ na wszystkich prętach: GJ_new = EI / ratio (zachowuje EI)
+  const updateEjGcRatio = (val) => {
+    const r = parseFloat(val);
+    if (!Number.isFinite(r) || r <= 0) return;
+    setEjGcRatioState(r);
+    setElements(prev => prev.map(el => ({
+      ...el,
+      GJ: ((parseFloat(el.EI) || 1) / r).toFixed(4)*1
+    })));
+  };
+  // Auto-wykryte typy obciążeń per stan: ['P'|'q'|'mixed'|'none', 'force'|'moment'|'mixed'|'none', ...]
+  const stateTypes = useMemo(() =>
+    statesData.map((s, i) => detectStateType(s, elements, i === 0)),
+    [statesData, elements]
+  );
+  // Wzbogacony obiekt symboliki przekazywany do helperów i komponentów
+  const sym = useMemo(() => ({enabled: symbolic.enabled, types: stateTypes}),
+    [symbolic.enabled, stateTypes]);
+
+  // Wybór jednostek symbolicznych dla różnych typów wyników
+  // Sufiks symboliczny dla wartości danego typu (kind) w danym stanie (stateIdx).
+  // Dla par (d_cross) potrzebny też stateIdx2.
+  const symSuffix = (kind, stateIdx, stateIdx2) => {
+    if (!sym.enabled) return '';
+    const idx = (stateIdx === undefined || stateIdx === null) ? activeState : stateIdx;
+    const f = factorForType(sym.types[idx]);
+    if (!f) return '';
+    if (kind === 'M' || kind === 'Mz' || kind === 'Ms') {
+      const u = formatUnit(f.P, f.Q, f.L);
+      return u ? ' ' + u : '';
+    }
+    if (kind === 'V' || kind === 'Rz') {
+      // siła = M / L → odejmij 1 od L
+      const u = formatUnit(f.P, f.Q, Math.max(f.L - 1, 0));
+      return u ? ' ' + u : '';
+    }
+    if (kind === 'Rm') {
+      const u = formatUnit(f.P, f.Q, f.L);
+      return u ? ' ' + u : '';
+    }
+    if (kind === 'w') {
+      // przemieszczenie pionowe = M·L²/EJ → wymnóż przez L² i podziel przez EJ
+      return ' ' + formatUnit(f.P, f.Q, f.L + 2, true);
+    }
+    if (kind === 'th') {
+      // kąt obrotu = M·L/EJ
+      return ' ' + formatUnit(f.P, f.Q, f.L + 1, true);
+    }
+    if (kind === 'd_self') {
+      // δᵢᵢ = ∫Mᵢ·Mᵢ ds / EJ → fᵢ²·L / EJ
+      return ' ' + formatUnit(2*f.P, 2*f.Q, 2*f.L + 1, true);
+    }
+    if (kind === 'd_cross') {
+      const f2 = factorForType(sym.types[stateIdx2]);
+      if (!f2) return '';
+      return ' ' + formatUnit(f.P + f2.P, f.Q + f2.Q, f.L + f2.L + 1, true);
+    }
+    if (kind === 'X') {
+      // X_i ma wymiar f_0 / f_i (siłowy lub momentowy w zależności od typu redundancji)
+      const f0 = factorForType(sym.types[0]);
+      if (!f0) return '';
+      const Pp = f0.P - f.P, Qp = f0.Q - f.Q, Lp = f0.L - f.L;
+      if (Pp < 0 || Qp < 0 || Lp < 0) return '';
+      const u = formatUnit(Pp, Qp, Lp);
+      return u ? ' ' + u : '';
+    }
+    return '';
+  };
+  const symFmt = (val, kind, decimals=2, stateIdx, stateIdx2) => {
+    const numStr = fmt(val, decimals);
+    if (numStr === '—' || numStr === '0') return numStr;
+    const sfx = symSuffix(kind, stateIdx, stateIdx2);
+    return sfx ? `${numStr}${sfx}` : numStr;
+  };
+
+  const calculate = useCallback(() => {
+    try {
+      setError(null);
+      const stateHasData = (idx) =>
+        statesData[idx].loads.some(l => Math.abs(parseFloat(l.Fz)||0)+Math.abs(parseFloat(l.Mx)||0)+Math.abs(parseFloat(l.My)||0) > 1e-12)
+        || elements.some(el => Math.abs(parseFloat(statesData[idx].elementQ[el.id])||0) > 1e-12);
+      const elsForState = (idx) => elements.map(el => ({...el, q: parseFloat(statesData[idx].elementQ[el.id]) || 0}));
+
+      const r0 = solveGrillage(nodes, elsForState(0), supports, statesData[0].loads);
+      const has1 = stateHasData(1);
+      const has2 = stateHasData(2);
+
+      let r1=null, r2=null, deltas=null, finalForces=null;
+      if (has1) {
+        r1 = solveGrillage(nodes, elsForState(1), supports, statesData[1].loads);
+        if (has2) {
+          r2 = solveGrillage(nodes, elsForState(2), supports, statesData[2].loads);
+          deltas = computeWereshchagin(r0.elementForces, r1.elementForces, r2.elementForces, elements);
+        } else {
+          deltas = computeWereshchagin(r0.elementForces, r1.elementForces, null, elements);
+        }
+        // Wykres końcowy: M = M0 + X1*M1 (+ X2*M2 jeśli has2)
+        const X1 = deltas.X1, X2 = deltas.X2 || 0;
+        finalForces = r0.elementForces.map((ef0, i) => {
+          const ef1 = r1.elementForces[i];
+          const ef2 = has2 ? r2.elementForces[i] : null;
+          const add2 = (k) => has2 ? X2 * (ef2[k]||0) : 0;
+          return {
+            el: ef0.el, L: ef0.L,
+            q: (ef0.q||0) + X1*(ef1.q||0) + (has2 ? X2*(ef2.q||0) : 0),
+            V1: ef0.V1 + X1*ef1.V1 + add2('V1'),
+            Ms1: ef0.Ms1 + X1*ef1.Ms1 + add2('Ms1'),
+            Mz1: ef0.Mz1 + X1*ef1.Mz1 + add2('Mz1'),
+            V2: ef0.V2 + X1*ef1.V2 + add2('V2'),
+            Ms2: ef0.Ms2 + X1*ef1.Ms2 + add2('Ms2'),
+            Mz2: ef0.Mz2 + X1*ef1.Mz2 + add2('Mz2'),
+            Mint_left: ef0.Mint_left + X1*ef1.Mint_left + add2('Mint_left'),
+            Mint_right: ef0.Mint_right + X1*ef1.Mint_right + add2('Mint_right'),
+            Tint: ef0.Tint + X1*ef1.Tint + add2('Tint'),
+          };
+        });
+      }
+      setResults({ state0: r0, state1: r1, state2: r2, deltas, finalForces });
+      setViewMode('mz');
+    } catch (e) { setError(e.message); setResults(null); }
+  }, [nodes, elements, supports, statesData]);
+
+  const loadExample = (key) => {
+    const ex = EXAMPLES[key];
+    setNodes(ex.nodes.map(n => ({...n})));
+    setElements(ex.elements.map(el => { const {q, ...rest} = el; return {...rest}; }));
+    setSupports(ex.supports.map(s => ({...s})));
+    const exQ = {};
+    ex.elements.forEach(el => { if (el.q) exQ[el.id] = parseFloat(el.q) || 0; });
+    setStatesData([
+      {loads: ex.loads.map(l => ({...l})), elementQ: exQ},
+      {loads: [], elementQ: {}},
+      {loads: [], elementQ: {}}
+    ]);
+    // Wyciągnij EJ/GC z pierwszego pręta przykładu
+    const firstEl = ex.elements[0];
+    if (firstEl) {
+      const ei = parseFloat(firstEl.EI) || 1;
+      const gj = parseFloat(firstEl.GJ) || 1;
+      setEjGcRatioState(ei / gj);
+    }
+    setActiveState(0);
+    setResults(null); setError(null); setViewMode('structure'); resetView();
+  };
+  const reset = () => { setNodes([]); setElements([]); setSupports([]); setStatesData([{loads:[], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}}]); setActiveState(0); setResults(null); setError(null); setViewMode('structure'); resetView(); };
+  const addNode = () => { setNodes([...nodes, {id: String.fromCharCode(65+nodes.length), x:0, y:0}]); };
+  const updateNode = (i,k,v) => { const n=[...nodes]; n[i]={...n[i],[k]:v}; setNodes(n); };
+  const removeNode = (i) => {
+    const id=nodes[i].id;
+    setNodes(nodes.filter((_,k)=>k!==i));
+    setElements(elements.filter(e => e.n1!==id && e.n2!==id));
+    setSupports(supports.filter(s => s.node!==id));
+    setStatesData(prev => prev.map(s => ({...s, loads: s.loads.filter(l => l.node !== id)})));
+  };
+  const addElement = () => {
+    const nextId = elements.length===0 ? 1 : Math.max(...elements.map(e=>e.id))+1;
+    setElements([...elements, {id:nextId, n1:nodes[0]?.id||'', n2:nodes[1]?.id||'', EI:1, GJ:0.77}]);
+  };
+  const updateElement = (i,k,v) => { const n=[...elements]; n[i]={...n[i],[k]:v}; setElements(n); };
+  const removeElement = (i) => setElements(elements.filter((_,k)=>k!==i));
+  const addSupport = () => setSupports([...supports, {node:nodes[0]?.id||'', z:true, rx:true, ry:true}]);
+  const updateSupport = (i,k,v) => { const n=[...supports]; n[i]={...n[i],[k]:v}; setSupports(n); };
+  const removeSupport = (i) => setSupports(supports.filter((_,k)=>k!==i));
+  const addLoad = () => setLoads([...loads, {node:nodes[0]?.id||'', Fz:0, Mx:0, My:0}]);
+  const updateLoad = (i,k,v) => { const n=[...loads]; n[i]={...n[i],[k]:v}; setLoads(n); };
+  const removeLoad = (i) => setLoads(loads.filter((_,k)=>k!==i));
+  const handlePrint = () => window.print();
+
+  // Wybór zestawu wyników do wyświetlenia w zależności od trybu widoku i aktywnego stanu
+  const displayResults = (() => {
+    if (!results) return null;
+    if (viewMode === 'mzFinal' || viewMode === 'msFinal') {
+      return results.finalForces ? {elementForces: results.finalForces} : null;
+    }
+    const stateRes = activeState === 2 ? results.state2 : activeState === 1 ? results.state1 : results.state0;
+    return stateRes ? {elementForces: stateRes.elementForces} : null;
+  })();
+  // Elementy z q dla aktywnego stanu (do wskaźników q na schemacie)
+  const elementsForView = elements.map(el => ({...el, q: getQ(el.id)}));
+  // Wyniki tabel (dla "siły wewnętrzne" / "reakcje" / "przemieszczenia") - aktywny stan
+  const tableResults = results ? (activeState === 2 ? results.state2 : activeState === 1 ? results.state1 : results.state0) : null;
+
+  const exportSchema = () => {
+    const defaultName = `schemat_${new Date().toISOString().slice(0,10)}`;
+    const name = prompt('Nazwa schematu (bez rozszerzenia):', defaultName);
+    if (!name) return;
+    const data = {
+      schemaVersion: 2,
+      name,
+      savedAt: new Date().toISOString(),
+      nodes, elements, supports, statesData,
+      symbolic,
+    };
+    try {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name.replace(/[^a-zA-Z0-9_\-ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, '_')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    } catch (e) {
+      alert('Błąd zapisu: ' + e.message);
+    }
+  };
+
+  const importSchema = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (!Array.isArray(data.nodes)) throw new Error('plik nie zawiera schematu rusztu');
+          setNodes(data.nodes.map(n => ({...n})));
+          const cleanEls = (data.elements || []).map(el => { const {q, ...rest} = el; return {...rest}; });
+          setElements(cleanEls);
+          setSupports((data.supports || []).map(s => ({...s})));
+          if (Array.isArray(data.statesData) && data.statesData.length >= 2) {
+            // Pad to 3 states if file has only 2 (backwards compat)
+            const states = data.statesData.map(s => ({loads: (s.loads||[]).map(l=>({...l})), elementQ: {...(s.elementQ||{})}}));
+            while (states.length < 3) states.push({loads: [], elementQ: {}});
+            setStatesData(states.slice(0, 3));
+          } else {
+            // Legacy v1: pojedyncze loads + q na pręcie
+            const exQ = {};
+            (data.elements || []).forEach(el => { if (el.q) exQ[el.id] = parseFloat(el.q) || 0; });
+            setStatesData([
+              {loads: (data.loads || []).map(l => ({...l})), elementQ: exQ},
+              {loads: [], elementQ: {}},
+              {loads: [], elementQ: {}}
+            ]);
+          }
+          setActiveState(0);
+          if (data.symbolic) setSymbolic({enabled: !!data.symbolic.enabled});
+          // Wyciągnij EJ/GC z pierwszego pręta importowanego schematu
+          if (cleanEls[0]) {
+            const ei = parseFloat(cleanEls[0].EI) || 1;
+            const gj = parseFloat(cleanEls[0].GJ) || 1;
+            setEjGcRatioState(ei / gj);
+          }
+          setResults(null);
+          setError(null);
+          setViewMode('structure');
+        } catch (err) {
+          alert('Nieprawidłowy plik: ' + err.message);
+        }
+      };
+      reader.onerror = () => alert('Błąd odczytu pliku');
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100" style={{fontFamily:'ui-sans-serif, system-ui, sans-serif'}}>
+      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10 no-print">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-cyan-500/10 border border-cyan-500/30 rounded flex items-center justify-center">
+              <span className="text-cyan-400 font-mono font-bold text-sm">R</span>
+            </div>
+            <div>
+              <h1 className="text-base font-semibold tracking-tight">Solver Rusztów <span className="text-cyan-400">MES</span></h1>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest">offline / standalone</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select onChange={e => e.target.value && loadExample(e.target.value)} value="" className="bg-slate-800 border border-slate-700 text-xs px-3 py-1.5 rounded text-slate-300 focus:outline-none focus:border-cyan-500">
+              <option value="">Wczytaj przykład…</option>
+              {Object.entries(EXAMPLES).map(([key, ex]) => <option key={key} value={key}>{ex.name}</option>)}
+            </select>
+            <button onClick={() => setShowHelp(!showHelp)} className="text-xs px-3 py-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center gap-1.5"><Info size={14}/> Pomoc</button>
+            <button onClick={importSchema} className="text-xs px-3 py-1.5 rounded text-slate-300 hover:text-cyan-300 hover:bg-cyan-950/30 flex items-center gap-1.5 border border-slate-700"><FolderOpen size={14}/> Wczytaj</button>
+            <button onClick={exportSchema} className="text-xs px-3 py-1.5 rounded text-slate-300 hover:text-cyan-300 hover:bg-cyan-950/30 flex items-center gap-1.5 border border-slate-700"><Save size={14}/> Zapisz</button>
+            <button onClick={reset} className="text-xs px-3 py-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 flex items-center gap-1.5"><RotateCcw size={14}/> Reset</button>
+            {results && <button onClick={handlePrint} className="text-xs px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 border border-slate-700"><Printer size={14}/> Drukuj</button>}
+            <button onClick={calculate} className="text-xs px-4 py-1.5 rounded bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 flex items-center gap-1.5 shadow-lg shadow-cyan-500/20"><Play size={14} fill="currentColor"/> Oblicz</button>
+          </div>
+        </div>
+      </header>
+
+      {showHelp && <div className="bg-slate-900/40 border-b border-slate-800 no-print"><div className="max-w-7xl mx-auto px-6 py-4 text-sm text-slate-300 space-y-2">
+        <p><span className="text-cyan-400 font-semibold">Konwencja:</span> ruszt w płaszczyźnie xy, z prostopadle.</p>
+        <p><span className="text-cyan-400 font-semibold">DOF:</span> w (z), θx, θy. Utwierdzenie = wszystkie 3, podpora przegubowa = tylko z.</p>
+        <p><span className="text-cyan-400 font-semibold">Obciążenia:</span> Fz ujemne = w dół (siła węzłowa). q ciągłe na pręcie – kolumna <code className="text-amber-400">q</code> w tabeli prętów (ujemna = w dół).</p>
+        <p><span className="text-cyan-400 font-semibold">Stany (metoda sił):</span> przełącznik <strong>Stan 0 / Stan 1 / Stan 2</strong> nad tabelami. Stan 0 = obciążenia rzeczywiste; Stan 1 = X₁=1, Stan 2 = X₂=1 (jeśli układ 2× niewyznaczalny). Aplikacja liczy δᵢⱼ (Wereszczagin), rozwiązuje układ na X₁ (i X₂) i tworzy wykres końcowy M = M₀ + X₁·M₁ (+ X₂·M₂). Stan 2 możesz zostawić pusty dla zwykłej 1× niewyznaczalności.</p>
+        <p><span className="text-cyan-400 font-semibold">Wyniki symboliczne:</span> włącz w pasku nad wynikami. Aplikacja <strong>automatycznie wykrywa</strong> typ obciążenia każdego stanu na podstawie tego co wpiszesz: Stan 0 z <code className="text-amber-400">Fz</code> → suffix <em>P</em>, z <code className="text-amber-400">q</code> na pręcie → <em>q</em>; Stan 1/2 z <code className="text-amber-400">Fz=1</code> → siła jednostkowa (suffix <em>L</em>), z <code className="text-amber-400">Mx/My=1</code> → moment jednostkowy (bez suffixu). <strong>Wpisuj dane znormalizowane (L=1, P=1 lub q=1, EJ=1)</strong> — wartości w wynikach to bezpośrednio współczynniki, np. <em>5.5 PL</em>, <em>0.083 qL⁴/EJ</em>, <em>16 L</em> dla X₁ siła.</p>
+        <p><span className="text-cyan-400 font-semibold">Wykresy:</span> Mz – paraboliczny gdy q≠0 (z ekstremum w środku przedziału), liniowy dla obciążeń węzłowych. Ms = stała wzdłuż pręta.</p>
+      </div></div>}
+
+      <div className="max-w-7xl mx-auto px-6 pt-4 no-print">
+        <div className="bg-slate-900/40 border border-slate-800 rounded-lg px-4 py-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500">Wyświetlanie:</span>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className={checkCell} checked={symbolic.enabled} onChange={e => setSymbolic({...symbolic, enabled: e.target.checked})}/>
+            <span className="text-slate-300">Tryb symboliczny</span>
+          </label>
+          <div className="w-px h-5 bg-slate-800"></div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-amber-300 font-mono">EJ/GC =</span>
+            <input
+              type="number" step="0.05" min="0.1"
+              value={ejGcRatio.toFixed(2)}
+              onChange={e => updateEjGcRatio(e.target.value)}
+              className="bg-slate-950 border border-amber-700/40 rounded px-2 py-0.5 text-xs text-amber-200 font-mono w-16 focus:outline-none focus:border-amber-500"
+              title="Globalna proporcja EJ/GC stosowana do wszystkich prętów"
+            />
+            <button onClick={() => updateEjGcRatio(1.0)} className={`text-[10px] px-1.5 py-0.5 rounded ${Math.abs(ejGcRatio-1.0)<1e-3?'bg-amber-500/20 text-amber-200 ring-1 ring-amber-500/40':'text-slate-400 hover:bg-slate-800'}`}>1.0</button>
+            <button onClick={() => updateEjGcRatio(1.3)} className={`text-[10px] px-1.5 py-0.5 rounded ${Math.abs(ejGcRatio-1.3)<1e-3?'bg-amber-500/20 text-amber-200 ring-1 ring-amber-500/40':'text-slate-400 hover:bg-slate-800'}`}>1.3</button>
+            <button onClick={() => updateEjGcRatio(1.5)} className={`text-[10px] px-1.5 py-0.5 rounded ${Math.abs(ejGcRatio-1.5)<1e-3?'bg-amber-500/20 text-amber-200 ring-1 ring-amber-500/40':'text-slate-400 hover:bg-slate-800'}`}>1.5</button>
+          </div>
+          {symbolic.enabled && (
+            <>
+              <div className="w-px h-5 bg-slate-800"></div>
+              <div className="flex items-center gap-3 text-xs flex-wrap">
+                <span className="text-slate-500">Auto-typy:</span>
+                {stateTypes.map((t, i) => {
+                  const labels = {P:'P (skupione)', q:'q (rozłożone)', force:'X=siła', moment:'X=moment', mixed:'mieszane', none:'puste'};
+                  const colors = i===0 ? 'text-cyan-300' : i===1 ? 'text-violet-300' : 'text-pink-300';
+                  return <span key={i} className={`${colors}`}>Stan {i}: <span className="font-mono">{labels[t]||t}</span></span>;
+                })}
+              </div>
+            </>
+          )}
+          {symbolic.enabled && <span className="text-[10px] text-slate-500 italic">Wpisuj L=1, P/q=1, EJ=1 — wartości będą bezpośrednio współczynnikami.</span>}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden no-print">
+          <div className="border-b border-slate-800 px-3 py-2 bg-slate-900/60 flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Stan:</span>
+            <button onClick={()=>setActiveState(0)} className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${activeState===0?'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Stan 0 (obciążenia rzeczywiste)</button>
+            <button onClick={()=>setActiveState(1)} className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${activeState===1?'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Stan 1 (X₁=1)</button>
+            <button onClick={()=>setActiveState(2)} className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${activeState===2?'bg-pink-500/20 text-pink-300 ring-1 ring-pink-500/40':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Stan 2 (X₂=1)</button>
+          </div>
+          <div className="border-b border-slate-800 flex bg-slate-900/60 overflow-x-auto">
+            <button className={tabBtn(activeTab==='nodes')} onClick={()=>setActiveTab('nodes')}>Węzły · {nodes.length}</button>
+            <button className={tabBtn(activeTab==='elements')} onClick={()=>setActiveTab('elements')}>Pręty · {elements.length}</button>
+            <button className={tabBtn(activeTab==='supports')} onClick={()=>setActiveTab('supports')}>Podpory · {supports.length}</button>
+            <button className={tabBtn(activeTab==='loads')} onClick={()=>setActiveTab('loads')}>Obciążenia · {loads.length}</button>
+          </div>
+          <div className="p-4">
+            {activeTab==='nodes' && <div>
+              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">ID</th><th className="text-left py-2 font-medium">x</th><th className="text-left py-2 font-medium">y</th><th></th></tr></thead><tbody>
+                {nodes.map((node,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                  <td><input className={inputCell} value={node.id} onChange={e=>updateNode(i,'id',e.target.value)}/></td>
+                  <td><input className={inputCell} type="number" step="0.1" value={node.x} onChange={e=>updateNode(i,'x',e.target.value)}/></td>
+                  <td><input className={inputCell} type="number" step="0.1" value={node.y} onChange={e=>updateNode(i,'y',e.target.value)}/></td>
+                  <td className="text-right"><button className={iconBtn} onClick={()=>removeNode(i)}><Trash2 size={14}/></button></td>
+                </tr>)}
+              </tbody></table>
+              <button className={`${addBtn} mt-3`} onClick={addNode}><Plus size={12}/> Dodaj węzeł</button>
+            </div>}
+            {activeTab==='elements' && <div>
+              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">ID</th><th className="text-left py-2 font-medium">Węzeł 1</th><th className="text-left py-2 font-medium">Węzeł 2</th><th className="text-left py-2 font-medium">EI</th><th className="text-left py-2 font-medium">GJ</th><th className="text-left py-2 font-medium" title="Obciążenie ciągłe (siła na metr). Ujemna = w dół.">q</th><th></th></tr></thead><tbody>
+                {elements.map((el,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                  <td className="font-mono text-xs px-2 text-slate-400">{el.id}</td>
+                  <td><select className={inputCell} value={el.n1} onChange={e=>updateElement(i,'n1',e.target.value)}><option value="">—</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select></td>
+                  <td><select className={inputCell} value={el.n2} onChange={e=>updateElement(i,'n2',e.target.value)}><option value="">—</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select></td>
+                  <td><input className={inputCell} type="number" step="0.1" value={el.EI} onChange={e=>updateElement(i,'EI',e.target.value)}/></td>
+                  <td><input className={inputCell} type="number" step="0.1" value={el.GJ} onChange={e=>updateElement(i,'GJ',e.target.value)}/></td>
+                  <td><input className={inputCell} type="number" step="0.5" value={getQ(el.id)} onChange={e=>setQ(el.id, e.target.value)}/></td>
+                  <td className="text-right"><button className={iconBtn} onClick={()=>removeElement(i)}><Trash2 size={14}/></button></td>
+                </tr>)}
+              </tbody></table>
+              <button className={`${addBtn} mt-3`} onClick={addElement}><Plus size={12}/> Dodaj pręt</button>
+            </div>}
+            {activeTab==='supports' && <div>
+              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">Węzeł</th><th className="text-center py-2 font-medium">w</th><th className="text-center py-2 font-medium">θx</th><th className="text-center py-2 font-medium">θy</th><th></th></tr></thead><tbody>
+                {supports.map((sup,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                  <td><select className={inputCell} value={sup.node} onChange={e=>updateSupport(i,'node',e.target.value)}><option value="">—</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select></td>
+                  <td className="text-center"><input type="checkbox" className={checkCell} checked={!!sup.z} onChange={e=>updateSupport(i,'z',e.target.checked)}/></td>
+                  <td className="text-center"><input type="checkbox" className={checkCell} checked={!!sup.rx} onChange={e=>updateSupport(i,'rx',e.target.checked)}/></td>
+                  <td className="text-center"><input type="checkbox" className={checkCell} checked={!!sup.ry} onChange={e=>updateSupport(i,'ry',e.target.checked)}/></td>
+                  <td className="text-right"><button className={iconBtn} onClick={()=>removeSupport(i)}><Trash2 size={14}/></button></td>
+                </tr>)}
+              </tbody></table>
+              <button className={`${addBtn} mt-3`} onClick={addSupport}><Plus size={12}/> Dodaj podporę</button>
+            </div>}
+            {activeTab==='loads' && <div>
+              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">Węzeł</th><th className="text-left py-2 font-medium">Fz</th><th className="text-left py-2 font-medium">Mx</th><th className="text-left py-2 font-medium">My</th><th></th></tr></thead><tbody>
+                {loads.map((ld,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                  <td><select className={inputCell} value={ld.node} onChange={e=>updateLoad(i,'node',e.target.value)}><option value="">—</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select></td>
+                  <td><input className={inputCell} type="number" step="0.1" value={ld.Fz} onChange={e=>updateLoad(i,'Fz',e.target.value)}/></td>
+                  <td><input className={inputCell} type="number" step="0.1" value={ld.Mx} onChange={e=>updateLoad(i,'Mx',e.target.value)}/></td>
+                  <td><input className={inputCell} type="number" step="0.1" value={ld.My} onChange={e=>updateLoad(i,'My',e.target.value)}/></td>
+                  <td className="text-right"><button className={iconBtn} onClick={()=>removeLoad(i)}><Trash2 size={14}/></button></td>
+                </tr>)}
+              </tbody></table>
+              <button className={`${addBtn} mt-3`} onClick={addLoad}><Plus size={12}/> Dodaj obciążenie</button>
+            </div>}
+          </div>
+        </div>
+
+        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden">
+          <div className="border-b border-slate-800 flex items-center bg-slate-900/60 no-print flex-wrap">
+            <button onClick={()=>setViewMode('structure')} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='structure'?'text-slate-200 border-slate-400':'text-slate-500 border-transparent hover:text-slate-300'}`}><Eye size={12}/> Schemat</button>
+            <button onClick={()=>setViewMode('mz')} disabled={!results} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='mz'?'text-cyan-300 border-cyan-400':'text-slate-500 border-transparent hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed'}`}><BarChart3 size={12}/> Mz {activeState===0?'(St.0)':activeState===1?'(St.1)':'(St.2)'}</button>
+            <button onClick={()=>setViewMode('ms')} disabled={!results} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='ms'?'text-orange-300 border-orange-400':'text-slate-500 border-transparent hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed'}`}><Activity size={12}/> Ms {activeState===0?'(St.0)':activeState===1?'(St.1)':'(St.2)'}</button>
+            <div className="w-px h-6 bg-slate-800 mx-1"></div>
+            <button onClick={()=>setViewMode('mz3d')} disabled={!results} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='mz3d'?'text-cyan-300 border-cyan-400':'text-slate-500 border-transparent hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed'}`}><BarChart3 size={12}/> Mz 3D</button>
+            <button onClick={()=>setViewMode('ms3d')} disabled={!results} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='ms3d'?'text-orange-300 border-orange-400':'text-slate-500 border-transparent hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed'}`}><Activity size={12}/> Ms 3D</button>
+            <div className="w-px h-6 bg-slate-800 mx-1"></div>
+            <button onClick={()=>setViewMode('mzFinal')} disabled={!results || !results.finalForces} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='mzFinal'?'text-emerald-300 border-emerald-400':'text-slate-500 border-transparent hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed'}`} title="M = M₀ + X₁·M₁ (+ X₂·M₂)"><BarChart3 size={12}/> Mz końcowy</button>
+            <div className="flex-1"></div>
+            <button onClick={resetView} title="Reset zoom/pan/obrotu" className="text-[10px] uppercase tracking-wider text-slate-500 hover:text-cyan-300 px-3 py-1 rounded hover:bg-slate-800/60 mr-2">⟲ Reset widoku</button>
+            {!results && <span className="text-[10px] text-slate-600 px-3">Naciśnij Oblicz</span>}
+          </div>
+          <div className="aspect-[19/13] bg-slate-950">
+            <StructureView nodes={nodes} elements={elementsForView} supports={supports} loads={loads} results={displayResults} viewMode={viewMode==='mzFinal'?'mz':(viewMode==='msFinal'?'ms':viewMode)} view={view} setView={setView} momentSuffix={symSuffix('M', (viewMode==='mzFinal'||viewMode==='msFinal') ? 0 : activeState)}/>
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="max-w-7xl mx-auto px-6 no-print"><div className="bg-rose-950/40 border border-rose-900 rounded-lg px-4 py-3 text-sm text-rose-200">{error}</div></div>}
+
+      {results && <div className="max-w-7xl mx-auto px-6 pb-10 space-y-4">
+        {results.deltas && <div className="bg-emerald-950/30 border border-emerald-800/50 rounded-lg p-4">
+          <div className="text-xs uppercase tracking-wider text-emerald-300 mb-3 font-semibold flex items-center gap-3 flex-wrap">
+            <span>Wereszczagin · Metoda sił {results.deltas.has2 && <span className="text-[10px] normal-case tracking-normal text-emerald-400/70">(układ 2× niewyznaczalny)</span>}</span>
+            <span className="bg-amber-950/40 border border-amber-700/40 rounded px-2 py-0.5 normal-case tracking-normal text-amber-200 font-mono text-xs">EJ/GC = {fmt(ejGcRatio, 2)}</span>
+          </div>
+          {results.deltas.has2 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm font-mono">
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₁₁</div><div className="text-emerald-300">{symFmt(results.deltas.delta11, 'd_self', 4, 1)}</div></div>
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₁₂ = δ₂₁</div><div className="text-emerald-300">{symFmt(results.deltas.delta12, 'd_cross', 4, 1, 2)}</div></div>
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₂₂</div><div className="text-emerald-300">{symFmt(results.deltas.delta22, 'd_self', 4, 2)}</div></div>
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₁₀</div><div className="text-emerald-300">{symFmt(results.deltas.delta10, 'd_cross', 4, 1, 0)}</div></div>
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₂₀</div><div className="text-emerald-300">{symFmt(results.deltas.delta20, 'd_cross', 4, 2, 0)}</div></div>
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₀₀ (kontrola)</div><div className="text-slate-400">{fmt(results.deltas.delta00, 4)}</div></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm font-mono">
+                <div className="bg-emerald-900/30 rounded px-3 py-2 ring-1 ring-emerald-700/40"><div className="text-[10px] text-emerald-400">X₁ (z układu 2×2)</div><div className="text-emerald-200 font-bold">{symFmt(results.deltas.X1, 'X', 4, 1)}</div></div>
+                <div className="bg-emerald-900/30 rounded px-3 py-2 ring-1 ring-emerald-700/40"><div className="text-[10px] text-emerald-400">X₂ (z układu 2×2)</div><div className="text-emerald-200 font-bold">{symFmt(results.deltas.X2, 'X', 4, 2)}</div></div>
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono pt-1">
+                <div>[δ₁₁ δ₁₂; δ₁₂ δ₂₂]·[X₁; X₂] = −[δ₁₀; δ₂₀]</div>
+                <div className="mt-1">Wykres końcowy: M = M₀ + X₁·M₁ + X₂·M₂ — kliknij "Mz końcowy"</div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₁₁</div><div className="text-emerald-300">{symFmt(results.deltas.delta11, 'd_self', 4, 1)}</div></div>
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₁₀</div><div className="text-emerald-300">{symFmt(results.deltas.delta10, 'd_cross', 4, 1, 0)}</div></div>
+                <div className="bg-slate-950/50 rounded px-3 py-2"><div className="text-[10px] text-slate-500">δ₀₀ (kontrola)</div><div className="text-slate-400">{fmt(results.deltas.delta00, 4)}</div></div>
+                <div className="bg-emerald-900/30 rounded px-3 py-2 ring-1 ring-emerald-700/40"><div className="text-[10px] text-emerald-400">X₁ = −δ₁₀ / δ₁₁</div><div className="text-emerald-200 font-bold">{symFmt(results.deltas.X1, 'X', 4, 1)}</div></div>
+              </div>
+              <div className="mt-3 text-[11px] text-slate-400">Wykres końcowy: M = M₀ + X₁·M₁ — kliknij "Mz końcowy" w widoku</div>
+            </>
+          )}
+          <div className="mt-3 flex flex-wrap items-center gap-2 no-print">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Rozkład Wereszczagina:</span>
+            <button onClick={()=>setWereszczaginShow(wereszczaginShow==='11'?null:'11')} className={`px-3 py-1 text-xs rounded ${wereszczaginShow==='11'?'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-500':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>{wereszczaginShow==='11'?'▼':'▶'} δ₁₁</button>
+            {results.deltas.has2 && <button onClick={()=>setWereszczaginShow(wereszczaginShow==='22'?null:'22')} className={`px-3 py-1 text-xs rounded ${wereszczaginShow==='22'?'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-500':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>{wereszczaginShow==='22'?'▼':'▶'} δ₂₂</button>}
+            {results.deltas.has2 && <button onClick={()=>setWereszczaginShow(wereszczaginShow==='12'?null:'12')} className={`px-3 py-1 text-xs rounded ${wereszczaginShow==='12'?'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-500':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>{wereszczaginShow==='12'?'▼':'▶'} δ₁₂</button>}
+            <button onClick={()=>setWereszczaginShow(wereszczaginShow==='10'?null:'10')} className={`px-3 py-1 text-xs rounded ${wereszczaginShow==='10'?'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-500':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>{wereszczaginShow==='10'?'▼':'▶'} δ₁₀</button>
+            {results.deltas.has2 && <button onClick={()=>setWereszczaginShow(wereszczaginShow==='20'?null:'20')} className={`px-3 py-1 text-xs rounded ${wereszczaginShow==='20'?'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-500':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>{wereszczaginShow==='20'?'▼':'▶'} δ₂₀</button>}
+            <button onClick={()=>setWereszczaginShow(wereszczaginShow==='00'?null:'00')} className={`px-3 py-1 text-xs rounded ${wereszczaginShow==='00'?'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-500':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>{wereszczaginShow==='00'?'▼':'▶'} δ₀₀</button>
+          </div>
+          {wereszczaginShow && <WereshchaginPanel deltas={results.deltas} pairKey={wereszczaginShow} label={`Rozkład per pręt: δ${wereszczaginShow.split('').map(c => c==='0'?'₀':c==='1'?'₁':'₂').join('')}`} sym={sym}/>}
+        </div>}
+
+        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden">
+          <div className="border-b border-slate-800 flex items-center bg-slate-900/60 no-print">
+            <button className={tabBtn(resultsTab==='forces')} onClick={()=>setResultsTab('forces')}>Siły wewnętrzne</button>
+            <button className={tabBtn(resultsTab==='reactions')} onClick={()=>setResultsTab('reactions')}>Reakcje</button>
+            <button className={tabBtn(resultsTab==='displacements')} onClick={()=>setResultsTab('displacements')}>Przemieszczenia</button>
+            <div className="flex-1"></div>
+            <span className="text-[10px] uppercase tracking-wider text-slate-500 px-3">{activeState===0?'Stan 0':'Stan 1'}</span>
+          </div>
+          <div className="p-4 overflow-x-auto">
+            {tableResults && resultsTab==='forces' && <table className="w-full text-sm font-mono"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 px-2">Pręt</th><th className="text-left py-2 px-2">Węzeł</th><th className="text-right py-2 px-2">V</th><th className="text-right py-2 px-2">Ms</th><th className="text-right py-2 px-2">Mz</th></tr></thead><tbody>
+              {tableResults.elementForces.map((ef,i) => <Fragment key={i}>
+                <tr className="border-b border-slate-800/30 hover:bg-slate-900/40">
+                  <td className="py-1.5 px-2 text-cyan-400" rowSpan="2">{ef.el.id}</td>
+                  <td className="py-1.5 px-2 text-slate-400">{ef.el.n1} (start)</td>
+                  <td className="py-1.5 px-2 text-right">{symFmt(ef.V1, 'V')}</td>
+                  <td className="py-1.5 px-2 text-right">{symFmt(ef.Ms1, 'M')}</td>
+                  <td className="py-1.5 px-2 text-right">{symFmt(ef.Mz1, 'M')}</td>
+                </tr>
+                <tr className="border-b border-slate-800 hover:bg-slate-900/40">
+                  <td className="py-1.5 px-2 text-slate-400">{ef.el.n2} (koniec)</td>
+                  <td className="py-1.5 px-2 text-right">{symFmt(ef.V2, 'V')}</td>
+                  <td className="py-1.5 px-2 text-right">{symFmt(ef.Ms2, 'M')}</td>
+                  <td className="py-1.5 px-2 text-right">{symFmt(ef.Mz2, 'M')}</td>
+                </tr>
+              </Fragment>)}
+            </tbody></table>}
+            {tableResults && resultsTab==='reactions' && <table className="w-full text-sm font-mono"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 px-2">Węzeł</th><th className="text-right py-2 px-2">Rz</th><th className="text-right py-2 px-2">Mx</th><th className="text-right py-2 px-2">My</th></tr></thead><tbody>
+              {tableResults.reactions.filter(r => r.Fz!==null||r.Mx!==null||r.My!==null).map((r,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                <td className="py-1.5 px-2 text-cyan-400">{r.id}</td>
+                <td className="py-1.5 px-2 text-right">{symFmt(r.Fz, 'Rz')}</td>
+                <td className="py-1.5 px-2 text-right">{symFmt(r.Mx, 'Rm')}</td>
+                <td className="py-1.5 px-2 text-right">{symFmt(r.My, 'Rm')}</td>
+              </tr>)}
+            </tbody></table>}
+            {tableResults && resultsTab==='displacements' && <table className="w-full text-sm font-mono"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 px-2">Węzeł</th><th className="text-right py-2 px-2">w</th><th className="text-right py-2 px-2">θx</th><th className="text-right py-2 px-2">θy</th></tr></thead><tbody>
+              {tableResults.displacements.map((d,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                <td className="py-1.5 px-2 text-cyan-400">{d.id}</td>
+                <td className="py-1.5 px-2 text-right">{symFmt(d.w, 'w', 4)}</td>
+                <td className="py-1.5 px-2 text-right">{symFmt(d.thetaX, 'th', 4)}</td>
+                <td className="py-1.5 px-2 text-right">{symFmt(d.thetaY, 'th', 4)}</td>
+              </tr>)}
+            </tbody></table>}
+            {!tableResults && <div className="text-sm text-slate-500 py-4">Stan {activeState} jest pusty (brak obciążeń ani q≠0). Dodaj dane lub przełącz stan.</div>}
+          </div>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

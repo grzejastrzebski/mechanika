@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STATIKA — kalkulatory konstrukcyjne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a1018; --bg2:#0c1623; --panel:#0e1a2a; --panel2:#101f31;
+    --line:#1d2c3f; --line2:#283b53;
+    --ink:#d6e1ee; --soft:#9fb1c6; --muted:#62788f;
+    --cyan:#34d6e8; --cyan-d:#1899a8; --amber:#f1a83a; --green:#41c98a; --red:#ef6a5e;
+    --glow:rgba(52,214,232,.10);
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    --sans:"IBM Plex Sans",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--bg);
+    background-image:
+      radial-gradient(900px 420px at 80% -8%, var(--glow), transparent 60%),
+      linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+    background-size:auto, 30px 30px, 30px 30px;
+    display:flex; flex-direction:column; min-height:100dvh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+
+  /* ---------- HEADER ---------- */
+  header.top{
+    display:flex; align-items:center; gap:18px;
+    padding:14px 22px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(14,26,42,.92), rgba(10,16,24,.72));
+    backdrop-filter:blur(8px);
+  }
+  .brand{display:flex; align-items:center; gap:12px; text-decoration:none}
+  .brand .mark{
+    width:34px;height:34px;flex:0 0 34px;border:1px solid var(--line2);
+    border-radius:8px;display:grid;place-items:center;background:#0b1622;
+    box-shadow:inset 0 0 0 1px rgba(52,214,232,.08), 0 0 18px rgba(52,214,232,.06);
+  }
+  .brand .word{line-height:1}
+  .brand .word b{
+    font-family:var(--mono); font-weight:700; font-size:1.18rem; letter-spacing:.22em;
+    color:#eaf3fb; display:block;
+  }
+  .brand .word span{
+    font-family:var(--mono); font-size:.62rem; letter-spacing:.32em; text-transform:uppercase;
+    color:var(--muted); display:block; margin-top:3px;
+  }
+  .spacer{flex:1}
+  .support{
+    display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+    font-family:var(--mono); font-size:.74rem; letter-spacing:.06em; font-weight:600;
+    color:#06222a; background:linear-gradient(180deg,var(--cyan),var(--cyan-d));
+    border:0; border-radius:9px; padding:9px 15px; text-decoration:none;
+    box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 6px 18px rgba(52,214,232,.18);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .support:hover{transform:translateY(-1px); box-shadow:0 10px 24px rgba(52,214,232,.28)}
+  .support:active{transform:translateY(0)}
+
+  /* ---------- TABS ---------- */
+  nav.tabs{
+    display:flex; gap:2px; padding:0 14px; border-bottom:1px solid var(--line);
+    background:rgba(8,13,20,.6); overflow-x:auto; scrollbar-width:thin;
+  }
+  nav.tabs::-webkit-scrollbar{height:6px}
+  nav.tabs::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px}
+  .tab{
+    appearance:none; background:none; border:0; cursor:pointer; white-space:nowrap;
+    display:flex; align-items:center; gap:8px; padding:13px 15px 12px;
+    color:var(--soft); font-family:var(--mono); font-size:.82rem; letter-spacing:.02em;
+    border-bottom:2px solid transparent; margin-bottom:-1px; transition:color .15s ease;
+  }
+  .tab .idx{font-size:.62rem; color:var(--muted); font-weight:600}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:#eaf3fb; border-bottom-color:var(--cyan)}
+  .tab.active .idx{color:var(--cyan)}
+  .tab .dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
+  .tab.ready .dot{background:var(--green); box-shadow:0 0 8px rgba(65,201,138,.6)}
+  .tab.soon .dot{background:var(--amber); opacity:.55}
+
+  /* ---------- STAGE ---------- */
+  main{flex:1; position:relative; min-height:0; padding:14px}
+  .stage{position:absolute; inset:14px; display:flex}
+  .view{display:none; width:100%; height:100%}
+  .view.show{display:flex}
+  .frame{
+    width:100%; height:100%; border:1px solid var(--line2); border-radius:12px;
+    background:#fff; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.45);
+    position:relative;
+  }
+  .frame iframe{width:100%; height:100%; border:0; display:block; background:#fff}
+  .frame .badge{
+    position:absolute; top:10px; left:12px; z-index:2; pointer-events:none;
+    font-family:var(--mono); font-size:.6rem; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--cyan); background:rgba(8,13,20,.55); border:1px solid var(--line2);
+    padding:3px 8px; border-radius:6px; backdrop-filter:blur(4px);
+  }
+
+  /* ---------- SOON CARD ---------- */
+  .soonwrap{width:100%; height:100%; display:grid; place-items:center;
+    border:1px dashed var(--line2); border-radius:12px;
+    background:repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 12px, transparent 12px 24px);
+  }
+  .soon{max-width:520px; text-align:center; padding:32px}
+  .soon .tag{
+    display:inline-block; font-family:var(--mono); font-size:.6rem; letter-spacing:.28em;
+    text-transform:uppercase; color:var(--amber); border:1px solid rgba(241,168,58,.35);
+    background:rgba(241,168,58,.07); padding:5px 11px; border-radius:20px; margin-bottom:18px;
+  }
+  .soon h2{font-family:var(--mono); font-weight:600; font-size:1.7rem; margin:0 0 10px; color:#eaf3fb; letter-spacing:.02em}
+  .soon p{color:var(--soft); font-size:.96rem; line-height:1.65; margin:0 auto; max-width:440px}
+  .soon .glyph{
+    width:64px;height:64px;margin:0 auto 22px;border:1px solid var(--line2);border-radius:14px;
+    display:grid;place-items:center;background:#0b1622;color:var(--muted);
+  }
+
+  /* ---------- HOME ---------- */
+  .home{width:100%; height:100%; overflow:auto; border:1px solid var(--line); border-radius:12px;
+    background:linear-gradient(180deg, rgba(14,26,42,.5), rgba(10,16,24,.2)); padding:38px clamp(20px,5vw,56px)}
+  .hero{max-width:780px; margin:8px 0 34px}
+  .hero .kicker{font-family:var(--mono); font-size:.66rem; letter-spacing:.34em; text-transform:uppercase; color:var(--cyan); margin-bottom:14px}
+  .hero h1{font-family:var(--mono); font-weight:700; font-size:clamp(2rem,5vw,3.1rem); line-height:1.04; margin:0 0 16px; letter-spacing:.01em; color:#f1f7fc}
+  .hero h1 em{color:var(--cyan); font-style:normal}
+  .hero p{color:var(--soft); font-size:1.04rem; line-height:1.7; max-width:640px; margin:0}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(248px,1fr)); gap:14px; max-width:1100px}
+  .card{
+    text-align:left; cursor:pointer; appearance:none; color:inherit;
+    border:1px solid var(--line); border-radius:12px; padding:18px 18px 16px;
+    background:linear-gradient(180deg, var(--panel), var(--bg2));
+    transition:transform .14s ease, border-color .14s ease, box-shadow .14s ease;
+    opacity:0; transform:translateY(10px); animation:rise .5s ease forwards;
+    display:flex; flex-direction:column; min-height:150px;
+  }
+  @keyframes rise{to{opacity:1; transform:translateY(0)}}
+  .card:hover{transform:translateY(-3px); border-color:var(--line2); box-shadow:0 14px 34px rgba(0,0,0,.4)}
+  .card .top{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+  .card .num{font-family:var(--mono); font-size:.7rem; color:var(--muted); letter-spacing:.1em}
+  .card .st{font-family:var(--mono); font-size:.56rem; letter-spacing:.16em; text-transform:uppercase; padding:3px 8px; border-radius:20px}
+  .card .st.r{color:var(--green); background:rgba(65,201,138,.1); border:1px solid rgba(65,201,138,.3)}
+  .card .st.s{color:var(--amber); background:rgba(241,168,58,.08); border:1px solid rgba(241,168,58,.28)}
+  .card h3{font-family:var(--mono); font-weight:600; font-size:1.08rem; margin:0 0 7px; color:#eaf3fb}
+  .card p{color:var(--soft); font-size:.84rem; line-height:1.55; margin:0; flex:1}
+  .card .go{margin-top:12px; font-family:var(--mono); font-size:.72rem; color:var(--cyan); display:flex; align-items:center; gap:6px}
+
+  /* ---------- FOOTER ---------- */
+  footer{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:11px 22px; border-top:1px solid var(--line);
+    font-family:var(--mono); font-size:.68rem; letter-spacing:.04em; color:var(--muted);
+    background:rgba(8,13,20,.5);
+  }
+  footer a{color:var(--soft); text-decoration:none; border-bottom:1px dotted var(--line2)}
+  footer a:hover{color:var(--cyan)}
+
+  /* ---------- DONATION MODAL ---------- */
+  .overlay{
+    position:fixed; inset:0; z-index:60; display:none; place-items:center; padding:20px;
+    background:rgba(5,9,14,.66); backdrop-filter:blur(5px); animation:fade .25s ease}
+  .overlay.show{display:grid}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{
+    width:min(440px,100%); border:1px solid var(--line2); border-radius:16px; overflow:hidden;
+    background:linear-gradient(180deg, var(--panel2), var(--bg2));
+    box-shadow:0 30px 80px rgba(0,0,0,.6); animation:pop .28s cubic-bezier(.2,.8,.2,1)}
+  @keyframes pop{from{transform:translateY(14px) scale(.97); opacity:0}to{transform:none; opacity:1}}
+  .modal .head{padding:22px 24px 0; display:flex; gap:14px; align-items:flex-start}
+  .modal .ico{width:42px;height:42px;flex:0 0 42px;border-radius:11px;display:grid;place-items:center;
+    background:rgba(241,168,58,.12); border:1px solid rgba(241,168,58,.3); color:var(--amber)}
+  .modal h3{font-family:var(--mono); font-weight:600; font-size:1.12rem; margin:2px 0 0; color:#f1f7fc}
+  .modal .body{padding:14px 24px 4px}
+  .modal .body p{color:var(--soft); font-size:.92rem; line-height:1.65; margin:0}
+  .modal .acts{padding:18px 24px 22px; display:flex; flex-direction:column; gap:9px}
+  .btn-primary{
+    width:100%; text-align:center; cursor:pointer; text-decoration:none; border:0;
+    font-family:var(--mono); font-weight:600; font-size:.82rem; letter-spacing:.04em;
+    color:#06222a; background:linear-gradient(180deg,var(--amber),#cf8a23); padding:12px; border-radius:10px;
+    box-shadow:0 8px 22px rgba(241,168,58,.2); transition:transform .12s ease}
+  .btn-primary:hover{transform:translateY(-1px)}
+  .btn-row{display:flex; gap:9px}
+  .btn-ghost{
+    flex:1; cursor:pointer; font-family:var(--mono); font-size:.74rem; letter-spacing:.02em;
+    color:var(--soft); background:transparent; border:1px solid var(--line2); border-radius:10px; padding:10px}
+  .btn-ghost:hover{color:var(--ink); border-color:var(--soft)}
+
+  @media (max-width:560px){
+    header.top{padding:12px 14px; gap:10px}
+    .brand .word b{font-size:1rem; letter-spacing:.18em}
+    .support{padding:8px 11px; font-size:.68rem}
+    main{padding:8px} .stage{inset:8px}
+    .home{padding:24px 16px}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="#start" id="brandLink">
+    <span class="mark" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d6e8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke-width="1" opacity=".55"/><path d="M3 21 21 3" stroke="#f1a83a" stroke-width="1.2"/>
+      </svg>
+    </span>
+    <span class="word"><b id="brandName">STATIKA</b><span id="brandTag">kalkulatory konstrukcyjne</span></span>
+  </a>
+  <span class="spacer"></span>
+  <a class="support" id="supportBtn" href="#" target="_blank" rel="noopener">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>
+    Wesprzyj projekt
+  </a>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main>
+  <div class="stage" id="stage"></div>
+</main>
+
+<footer>
+  <span id="footYear">© 2026 STATIKA</span>
+  <span class="spacer" style="flex:1"></span>
+  <span>narzędzia darmowe · jeśli pomogły — <a id="footSupport" href="#" target="_blank" rel="noopener">postaw kawę ☕</a></span>
+</footer>
+
+<!-- DONATION MODAL -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="head">
+      <div class="ico" aria-hidden="true">☕</div>
+      <h3 id="modalTitle">Podobają Ci się te kalkulatory?</h3>
+    </div>
+    <div class="body">
+      <p>Cieszę się, że są przydatne! Utrzymuję je za darmo dla wszystkich. Jeśli oszczędziły Ci trochę czasu, możesz wrzucić parę groszy — choćby na utrzymanie domeny. Każda wpłata to ogromna motywacja do rozwijania kolejnych narzędzi.</p>
+    </div>
+    <div class="acts">
+      <a class="btn-primary" id="modalDonate" href="#" target="_blank" rel="noopener">Postaw kawę / Wesprzyj ☕</a>
+      <div class="btn-row">
+        <button class="btn-ghost" id="modalLater">Może później</button>
+        <button class="btn-ghost" id="modalNever">Nie pokazuj więcej</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   KONFIGURACJA  —  edytuj tutaj
+   ============================================================ */
+const BRAND = { name:"STATIKA", tagline:"kalkulatory konstrukcyjne" };
+
+// ▶ Podmień na swój link do wpłat (buycoffee.to / Stripe / PayPal / itp.)
+const DONATION_URL = "https://buycoffee.to/twoj-profil";
+
+// Po ilu kliknięciach „Oblicz" (łącznie, we wszystkich zakładkach) pokazać okienko:
+const DONATION_THRESHOLD = 5;
+
+const TABS = [
+  { id:"start",       label:"Start",          status:"home" },
+  { id:"ruszty",      label:"Ruszty",         status:"ready", type:"iframe", src:"solver-rusztow.html",
+    title:"Solver rusztów (MES)",
+    desc:"Analiza rusztów płaskich metodą elementów skończonych: reakcje, siły wewnętrzne, wykresy Mz/Ms oraz graficzne mnożenie Wereszczagina." },
+  { id:"plyty",       label:"Płyty okrągłe",  status:"ready", type:"iframe", src:"plyty-okragle.html",
+    title:"Płyty okrągłe",
+    desc:"Zginanie osiowo-symetrycznych płyt kołowych i pierścieniowych: ugięcia, momenty i siły poprzeczne, krok po kroku, z wykresami." },
+  { id:"belki",       label:"Belki",          status:"soon",
+    title:"Belki",
+    desc:"Belki statycznie wyznaczalne i niewyznaczalne: reakcje, siły tnące i momenty zginające wraz z wykresami." },
+  { id:"ramy",        label:"Ramy",           status:"soon",
+    title:"Ramy",
+    desc:"Ramy płaskie: wyznaczanie sił wewnętrznych oraz wykresy M, V i N dla zadanego schematu i obciążeń." },
+  { id:"reakcje",     label:"Reakcje",        status:"soon",
+    title:"Reakcje podporowe",
+    desc:"Szybkie obliczanie reakcji podporowych dla dowolnego układu sił skupionych, rozłożonych i momentów." },
+  { id:"przesuniecia",label:"Przesunięcia",   status:"soon",
+    title:"Przesunięcia i ugięcia",
+    desc:"Ugięcia i kąty obrotu wybranych przekrojów — metoda całkowa oraz graficzne mnożenie wykresów (Wereszczagin)." },
+];
+
+/* ============================================================
+   APLIKACJA POWŁOKI
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const stage = $("stage");
+const tabsEl = $("tabs");
+const frames = {};       // id -> iframe element (lazy)
+let active = null;
+
+// brand + linki wpłat
+document.title = BRAND.name + " — " + BRAND.tagline;
+$("brandName").textContent = BRAND.name;
+$("brandTag").textContent = BRAND.tagline;
+$("footYear").textContent = "© " + new Date().getFullYear() + " " + BRAND.name;
+[$("supportBtn"), $("footSupport"), $("modalDonate")].forEach(a => a.href = DONATION_URL);
+
+// --- zakładki ---
+TABS.forEach((t, i) => {
+  const b = document.createElement("button");
+  b.className = "tab " + (t.status==="ready" ? "ready" : t.status==="soon" ? "soon" : "");
+  b.dataset.id = t.id;
+  b.innerHTML =
+    `<span class="idx">${String(i).padStart(2,"0")}</span>` +
+    (t.status!=="home" ? `<span class="dot"></span>` : "") +
+    `<span>${t.label}</span>`;
+  b.addEventListener("click", () => go(t.id));
+  tabsEl.appendChild(b);
+});
+
+function buildHome(){
+  const wrap = document.createElement("div");
+  wrap.className = "view home"; wrap.dataset.id = "start";
+  const mods = TABS.filter(t => t.status!=="home");
+  wrap.innerHTML = `
+    <div class="hero">
+      <div class="kicker">obliczenia konstrukcyjne · w przeglądarce · za darmo</div>
+      <h1>Komplet narzędzi do <em>statyki i wytrzymałości</em> w jednym miejscu.</h1>
+      <p>Zestaw kalkulatorów inżynierskich — od rusztów i płyt okrągłych po belki, ramy i przesunięcia. Wszystko liczy się lokalnie w Twojej przeglądarce, bez logowania i bez wysyłania danych. Wybierz moduł poniżej lub z zakładek u góry.</p>
+    </div>
+    <div class="grid">
+      ${mods.map((m,k)=>`
+        <button class="card" data-go="${m.id}" style="animation-delay:${k*55}ms">
+          <div class="top">
+            <span class="num">// ${String(TABS.indexOf(m)).padStart(2,"0")}</span>
+            <span class="st ${m.status==="ready"?"r":"s"}">${m.status==="ready"?"Gotowe":"Wkrótce"}</span>
+          </div>
+          <h3>${m.title}</h3>
+          <p>${m.desc}</p>
+          <span class="go">${m.status==="ready"?"Otwórz":"W przygotowaniu"} <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+        </button>`).join("")}
+    </div>`;
+  wrap.querySelectorAll("[data-go]").forEach(c => c.addEventListener("click", ()=>go(c.dataset.go)));
+  return wrap;
+}
+
+function buildSoon(t){
+  const wrap = document.createElement("div");
+  wrap.className = "view"; wrap.dataset.id = t.id;
+  wrap.innerHTML = `
+    <div class="soonwrap"><div class="soon">
+      <div class="glyph"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/></svg></div>
+      <div class="tag">moduł w przygotowaniu</div>
+      <h2>${t.title}</h2>
+      <p>${t.desc}</p>
+    </div></div>`;
+  return wrap;
+}
+
+function ensureFrame(t){
+  let f = frames[t.id];
+  if(!f){
+    const wrap = document.createElement("div");
+    wrap.className = "view"; wrap.dataset.id = t.id;
+    wrap.innerHTML = `<div class="frame"><span class="badge">${t.label}</span><iframe loading="lazy" title="${t.title}"></iframe></div>`;
+    stage.appendChild(wrap);
+    const iframe = wrap.querySelector("iframe");
+    iframe.src = t.src;                 // ładowane dopiero przy pierwszym wejściu
+    attachCalcCounter(iframe);          // zliczanie kliknięć „Oblicz"
+    frames[t.id] = wrap;
+    f = wrap;
+  }
+  return f;
+}
+
+function go(id){
+  const t = TABS.find(x => x.id === id) || TABS[0];
+  active = t.id;
+  // zakładki
+  tabsEl.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.id === t.id));
+  // hash
+  if(location.hash.slice(1) !== t.id) history.replaceState(null, "", "#"+t.id);
+  // treść — ukryj wszystkie
+  stage.querySelectorAll(".view").forEach(v => v.classList.remove("show"));
+  let view;
+  if(t.status === "home"){
+    view = stage.querySelector('.view.home') || stage.appendChild(buildHome());
+  } else if(t.type === "iframe"){
+    view = ensureFrame(t);
+  } else {
+    view = stage.querySelector(`.view[data-id="${t.id}"]:not(.frame)`) ;
+    if(!view || view.querySelector("iframe")){ view = stage.appendChild(buildSoon(t)); }
+  }
+  view.classList.add("show");
+}
+
+window.addEventListener("hashchange", () => {
+  const id = location.hash.slice(1);
+  if(id && id !== active) go(id);
+});
+
+// start: z hasha albo „start"
+go(location.hash.slice(1) || "start");
+
+/* ============================================================
+   OKIENKO Z WPŁATĄ — po DONATION_THRESHOLD kliknięciach „Oblicz"
+   (zliczane bez modyfikacji kalkulatorów, przez nasłuch w iframe)
+   ============================================================ */
+const LS_COUNT = "statika_calc_count";
+const LS_NEVER = "statika_donate_never";
+const LS_SNOOZE = "statika_donate_snooze";   // do jakiego licznika nie pokazywać
+
+function getN(k){ try{ return parseInt(localStorage.getItem(k)||"0",10)||0; }catch(e){ return 0; } }
+function setN(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
+function flag(k){ try{ return localStorage.getItem(k)==="1"; }catch(e){ return false; } }
+
+function bumpCalc(){
+  if(flag(LS_NEVER)) return;
+  const n = getN(LS_COUNT) + 1;
+  setN(LS_COUNT, n);
+  const snooze = getN(LS_SNOOZE);
+  if(n >= DONATION_THRESHOLD && n >= snooze){ showModal(); }
+}
+
+// Nasłuch kliknięć „Oblicz" wewnątrz iframe (działa przy serwowaniu z jednego origin).
+function attachCalcCounter(iframe){
+  iframe.addEventListener("load", () => {
+    try{
+      const doc = iframe.contentDocument;
+      if(!doc) return;                       // inny origin (np. file://) — pomijamy
+      doc.addEventListener("click", (e) => {
+        const btn = e.target.closest && e.target.closest("button,.btn,input[type=button],input[type=submit]");
+        if(!btn) return;
+        const txt = (btn.textContent || btn.value || "").toLowerCase();
+        if(/oblicz/.test(txt)) bumpCalc();
+      }, true);
+    }catch(err){ /* cross-origin — okienko można też wywołać ręcznie */ }
+  });
+}
+
+// modal
+const overlay = $("overlay");
+function showModal(){ overlay.classList.add("show"); }
+function hideModal(){ overlay.classList.remove("show"); }
+$("modalLater").addEventListener("click", () => {           // przypomnij za kolejne THRESHOLD
+  setN(LS_SNOOZE, getN(LS_COUNT) + DONATION_THRESHOLD); hideModal();
+});
+$("modalNever").addEventListener("click", () => { try{ localStorage.setItem(LS_NEVER,"1"); }catch(e){} hideModal(); });
+$("modalDonate").addEventListener("click", () => { setN(LS_SNOOZE, getN(LS_COUNT) + 9999); hideModal(); });
+overlay.addEventListener("click", e => { if(e.target === overlay) hideModal(); });
+document.addEventListener("keydown", e => { if(e.key === "Escape") hideModal(); });
+</script>
+</body>
+</html>

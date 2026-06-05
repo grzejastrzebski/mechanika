@@ -8,10 +8,71 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Jasny motyw "papierowy" spójny z kalkulatorem płyt okrągłych.
+  // slate -> paleta papier/atrament/linia/muted; akcenty odwrócone
+  // (jasne odcienie 300/400 stają się ciemne i czytelne na jasnym tle,
+  //  ciemne tinty-tła 900/950 stają się jasne).
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          slate: {
+            50:'#ffffff', 100:'#16243a', 200:'#16243a', 300:'#2a3a52',
+            400:'#51617a', 500:'#5a6b80', 600:'#7c8a9c', 700:'#bcccdb',
+            800:'#c9d6e3', 900:'#ffffff', 950:'#fbfaf5'
+          },
+          cyan: {
+            50:'#083344', 100:'#164e63', 200:'#155e75', 300:'#0e7490',
+            400:'#0891b2', 500:'#06b6d4', 600:'#22d3ee', 700:'#67e8f9',
+            800:'#a5f3fc', 900:'#cffafe', 950:'#ecfeff'
+          },
+          emerald: {
+            50:'#022c22', 100:'#064e3b', 200:'#065f46', 300:'#047857',
+            400:'#059669', 500:'#10b981', 600:'#34d399', 700:'#6ee7b7',
+            800:'#a7f3d0', 900:'#d1fae5', 950:'#ecfdf5'
+          },
+          amber: {
+            50:'#451a03', 100:'#78350f', 200:'#92400e', 300:'#b45309',
+            400:'#d97706', 500:'#f59e0b', 600:'#fbbf24', 700:'#fcd34d',
+            800:'#fde68a', 900:'#fef3c7', 950:'#fffbeb'
+          },
+          violet: {
+            50:'#2e1065', 100:'#4c1d95', 200:'#5b21b6', 300:'#6d28d9',
+            400:'#7c3aed', 500:'#8b5cf6', 600:'#a78bfa', 700:'#c4b5fd',
+            800:'#ddd6fe', 900:'#ede9fe', 950:'#f5f3ff'
+          },
+          pink: {
+            50:'#500724', 100:'#831843', 200:'#9d174d', 300:'#be185d',
+            400:'#db2777', 500:'#ec4899', 600:'#f472b6', 700:'#f9a8d4',
+            800:'#fbcfe8', 900:'#fce7f3', 950:'#fdf2f8'
+          },
+          rose: {
+            50:'#4c0519', 100:'#881337', 200:'#9f1239', 300:'#be123c',
+            400:'#e11d48', 500:'#f43f5e', 600:'#fb7185', 700:'#fda4af',
+            800:'#fecdd3', 900:'#ffe4e6', 950:'#fff1f2'
+          },
+          orange: {
+            50:'#431407', 100:'#7c2d12', 200:'#9a3412', 300:'#c2410c',
+            400:'#ea580c', 500:'#f97316', 600:'#fb923c', 700:'#fdba74',
+            800:'#fed7aa', 900:'#ffedd5', 950:'#fff7ed'
+          }
+        }
+      }
+    }
+  };
+</script>
 <style>
-  body { margin: 0; background: #020617; }
+  body {
+    margin: 0;
+    background: #fbfaf5;
+    background-image:
+      linear-gradient(#dde7ef 1px, transparent 1px),
+      linear-gradient(90deg, #dde7ef 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
   @media print {
-    body { background: white; }
+    body { background: white; background-image: none; }
     .no-print { display: none !important; }
     svg { background: white !important; }
   }
@@ -614,12 +675,12 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
     const ccx=(pxMin+pxMax)/2, ccy=(pyMin+pyMax)/2;
     const ps = (x,y,z) => { const p=proj(x,y,z); return [W/2+view.zoom*sc*(p.px-ccx)+view.panX, H/2+view.zoom*sc*(p.py-ccy)+view.panY]; };
 
-    const dColor = viewMode==='mz3d' ? '#22d3ee' : '#fb923c';
+    const dColor = viewMode==='mz3d' ? '#0891b2' : '#ea580c';
     const dFill = viewMode==='mz3d' ? 'rgba(34,211,238,0.30)' : 'rgba(251,146,60,0.30)';
 
     return (
       <svg viewBox={`0 0 ${W} ${H}`} {...svgProps}>
-        <defs><pattern id="grid3d" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e293b" strokeWidth="0.5"/></pattern></defs>
+        <defs><pattern id="grid3d" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#dde7ef" strokeWidth="0.5"/></pattern></defs>
         <rect width={W} height={H} fill="url(#grid3d)"/>
 
         {/* Coordinate axes indicator */}
@@ -628,13 +689,13 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
             const L = 26;
             const xv = proj(1,0,0), yv = proj(0,1,0), zv = proj(0,0,1);
             return <>
-              <line x1="0" y1="0" x2={L*xv.px} y2={L*xv.py} stroke="#94a3b8" strokeWidth="1.5"/>
-              <text x={L*xv.px+5} y={L*xv.py+4} fill="#94a3b8" fontSize="11" fontFamily="monospace">x</text>
-              <line x1="0" y1="0" x2={L*yv.px} y2={L*yv.py} stroke="#94a3b8" strokeWidth="1.5"/>
-              <text x={L*yv.px-12} y={L*yv.py+4} fill="#94a3b8" fontSize="11" fontFamily="monospace">y</text>
-              <line x1="0" y1="0" x2={L*zv.px} y2={L*zv.py} stroke="#94a3b8" strokeWidth="1.5"/>
-              <text x={L*zv.px+5} y={L*zv.py+4} fill="#94a3b8" fontSize="11" fontFamily="monospace">z</text>
-              <circle cx="0" cy="0" r="2" fill="#94a3b8"/>
+              <line x1="0" y1="0" x2={L*xv.px} y2={L*xv.py} stroke="#5a6b80" strokeWidth="1.5"/>
+              <text x={L*xv.px+5} y={L*xv.py+4} fill="#5a6b80" fontSize="11" fontFamily="monospace">x</text>
+              <line x1="0" y1="0" x2={L*yv.px} y2={L*yv.py} stroke="#5a6b80" strokeWidth="1.5"/>
+              <text x={L*yv.px-12} y={L*yv.py+4} fill="#5a6b80" fontSize="11" fontFamily="monospace">y</text>
+              <line x1="0" y1="0" x2={L*zv.px} y2={L*zv.py} stroke="#5a6b80" strokeWidth="1.5"/>
+              <text x={L*zv.px+5} y={L*zv.py+4} fill="#5a6b80" fontSize="11" fontFamily="monospace">z</text>
+              <circle cx="0" cy="0" r="2" fill="#5a6b80"/>
             </>;
           })()}
         </g>
@@ -644,7 +705,7 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
           <text textAnchor="end" fill={dColor} fontSize="14" fontFamily="monospace" fontWeight="bold">
             {viewMode==='mz3d' ? 'WYKRES Mz · aksonometria' : 'WYKRES Ms · aksonometria'}
           </text>
-          {maxM > 0 && <text textAnchor="end" x="0" y="16" fill="#64748b" fontSize="10" fontFamily="monospace">max = {fmt(maxM, 2)}{momentSuffix||''}</text>}
+          {maxM > 0 && <text textAnchor="end" x="0" y="16" fill="#5a6b80" fontSize="10" fontFamily="monospace">max = {fmt(maxM, 2)}{momentSuffix||''}</text>}
         </g>
 
         {/* Diagram polygons (rendered first so structure shows on top) */}
@@ -699,7 +760,7 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
           if (!n1||!n2) return null;
           const [x1, y1] = ps(parseFloat(n1.x)||0, parseFloat(n1.y)||0, 0);
           const [x2, y2] = ps(parseFloat(n2.x)||0, parseFloat(n2.y)||0, 0);
-          return <line key={`b3d-${el.id}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#cbd5e1" strokeWidth="2.8"/>;
+          return <line key={`b3d-${el.id}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#16243a" strokeWidth="2.8"/>;
         })}
 
         {/* Nodes */}
@@ -707,8 +768,8 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
           const [px, py] = ps(parseFloat(node.x)||0, parseFloat(node.y)||0, 0);
           return (
             <g key={`n3d-${node.id}`}>
-              <circle cx={px} cy={py} r="5" fill="#0f172a" stroke="#22d3ee" strokeWidth="1.5"/>
-              <text x={px+10} y={py+16} fill="#22d3ee" fontSize="11" fontWeight="bold" fontFamily="monospace">{node.id}</text>
+              <circle cx={px} cy={py} r="5" fill="#ffffff" stroke="#0891b2" strokeWidth="1.5"/>
+              <text x={px+10} y={py+16} fill="#0891b2" fontSize="11" fontWeight="bold" fontFamily="monospace">{node.id}</text>
             </g>
           );
         })}
@@ -743,43 +804,43 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
     if (maxVal > 0) diagScale = Math.min(W,H)*0.18 / maxVal;
   }
 
-  const diagColor = viewMode==='mz' ? '#22d3ee' : '#fb923c';
-  const diagFill = viewMode==='mz' ? 'rgba(34,211,238,0.22)' : 'rgba(251,146,60,0.22)';
+  const diagColor = viewMode==='mz' ? '#0891b2' : '#ea580c';
+  const diagFill = viewMode==='mz' ? 'rgba(8,145,178,0.18)' : 'rgba(234,88,12,0.18)';
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} {...svgProps}>
       <defs>
         <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e293b" strokeWidth="0.5"/>
+          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#dde7ef" strokeWidth="0.5"/>
         </pattern>
         <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="6" stroke="#94a3b8" strokeWidth="1"/>
+          <line x1="0" y1="0" x2="0" y2="6" stroke="#5a6b80" strokeWidth="1"/>
         </pattern>
         <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-          <polygon points="0 0, 10 3, 0 6" fill="#22d3ee"/>
+          <polygon points="0 0, 10 3, 0 6" fill="#0891b2"/>
         </marker>
         <marker id="qArrow" markerWidth="6" markerHeight="6" refX="5" refY="2" orient="auto">
-          <polygon points="0 0, 5 2, 0 4" fill="#fb923c"/>
+          <polygon points="0 0, 5 2, 0 4" fill="#ea580c"/>
         </marker>
       </defs>
       <rect width={W} height={H} fill="url(#grid)"/>
       <g transform={`translate(30, ${H-30})`}>
-        <line x1="0" y1="0" x2="22" y2="0" stroke="#475569" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
-        <line x1="0" y1="0" x2="0" y2="-22" stroke="#475569" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
-        <text x="28" y="4" fill="#64748b" fontSize="10" fontFamily="monospace">x</text>
-        <text x="-4" y="-26" fill="#64748b" fontSize="10" fontFamily="monospace">y</text>
-        <circle cx="0" cy="0" r="3" fill="none" stroke="#475569" strokeWidth="1"/>
-        <circle cx="0" cy="0" r="0.8" fill="#475569"/>
-        <text x="6" y="-6" fill="#64748b" fontSize="9" fontFamily="monospace">z↑</text>
+        <line x1="0" y1="0" x2="22" y2="0" stroke="#16243a" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+        <line x1="0" y1="0" x2="0" y2="-22" stroke="#16243a" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+        <text x="28" y="4" fill="#5a6b80" fontSize="10" fontFamily="monospace">x</text>
+        <text x="-4" y="-26" fill="#5a6b80" fontSize="10" fontFamily="monospace">y</text>
+        <circle cx="0" cy="0" r="3" fill="none" stroke="#16243a" strokeWidth="1"/>
+        <circle cx="0" cy="0" r="0.8" fill="#16243a"/>
+        <text x="6" y="-6" fill="#5a6b80" fontSize="9" fontFamily="monospace">z↑</text>
       </g>
       <g transform={`translate(${W-30}, 30)`}>
-        <text textAnchor="end" fill={viewMode==='structure'?'#64748b':diagColor} fontSize="14" fontFamily="monospace" fontWeight="bold">
+        <text textAnchor="end" fill={viewMode==='structure'?'#5a6b80':diagColor} fontSize="14" fontFamily="monospace" fontWeight="bold">
           {viewMode==='structure' && 'SCHEMAT'}
           {viewMode==='mz' && 'WYKRES Mz'}
           {viewMode==='ms' && 'WYKRES Ms'}
         </text>
         {(viewMode==='mz'||viewMode==='ms') && maxVal>0 && (
-          <text textAnchor="end" x="0" y="16" fill="#64748b" fontSize="10" fontFamily="monospace">max = {fmt(maxVal,2)}{momentSuffix||''}</text>
+          <text textAnchor="end" x="0" y="16" fill="#5a6b80" fontSize="10" fontFamily="monospace">max = {fmt(maxVal,2)}{momentSuffix||''}</text>
         )}
       </g>
       {elements.map(el => {
@@ -790,10 +851,10 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
         const mx=(x1+x2)/2, my=(y1+y2)/2;
         return (
           <g key={`el-${el.id}`}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#475569" strokeWidth="2.5"/>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#16243a" strokeWidth="2.5"/>
             {viewMode==='structure' && (<>
-              <circle cx={mx} cy={my} r="9" fill="#0f172a" stroke="#334155" strokeWidth="1"/>
-              <text x={mx} y={my+3} textAnchor="middle" fill="#94a3b8" fontSize="9" fontFamily="monospace">{el.id}</text>
+              <circle cx={mx} cy={my} r="9" fill="#ffffff" stroke="#16243a" strokeWidth="1"/>
+              <text x={mx} y={my+3} textAnchor="middle" fill="#5a6b80" fontSize="9" fontFamily="monospace">{el.id}</text>
             </>)}
           </g>
         );
@@ -818,7 +879,7 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
           const ax = cx + nx*dashLen, ay = cy + ny*dashLen;
           dashes.push({cx, cy, ax, ay, k});
         }
-        const qColor = q < 0 ? '#fb923c' : '#a78bfa';
+        const qColor = q < 0 ? '#ea580c' : '#7c3aed';
         const labX = (x1+x2)/2 + nx*16;
         const labY = (y1+y2)/2 + ny*16 + 4;
         return (
@@ -898,12 +959,12 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
         const fixedAll = sup.z && sup.rx && sup.ry, onlyZ = sup.z && !sup.rx && !sup.ry;
         return (
           <g key={`sup-${node.id}`}>
-            {fixedAll && <rect x={px-14} y={py-14} width="28" height="28" fill="url(#hatch)" stroke="#94a3b8" strokeWidth="1"/>}
+            {fixedAll && <rect x={px-14} y={py-14} width="28" height="28" fill="url(#hatch)" stroke="#5a6b80" strokeWidth="1"/>}
             {onlyZ && (<>
-              <polygon points={`${px},${py} ${px-10},${py+16} ${px+10},${py+16}`} fill="none" stroke="#94a3b8" strokeWidth="1.5"/>
-              <line x1={px-14} y1={py+18} x2={px+14} y2={py+18} stroke="#94a3b8" strokeWidth="1"/>
+              <polygon points={`${px},${py} ${px-10},${py+16} ${px+10},${py+16}`} fill="none" stroke="#5a6b80" strokeWidth="1.5"/>
+              <line x1={px-14} y1={py+18} x2={px+14} y2={py+18} stroke="#5a6b80" strokeWidth="1"/>
             </>)}
-            {!fixedAll && !onlyZ && <circle cx={px} cy={py} r="13" fill="none" stroke="#94a3b8" strokeWidth="1" strokeDasharray="3,2"/>}
+            {!fixedAll && !onlyZ && <circle cx={px} cy={py} r="13" fill="none" stroke="#5a6b80" strokeWidth="1" strokeDasharray="3,2"/>}
           </g>
         );
       })}
@@ -911,8 +972,8 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
         const px=tx(parseFloat(node.x)||0), py=ty(parseFloat(node.y)||0);
         return (
           <g key={`node-${node.id}`}>
-            <circle cx={px} cy={py} r="5" fill="#0f172a" stroke="#22d3ee" strokeWidth="1.5"/>
-            <text x={px+9} y={py-9} fill="#22d3ee" fontSize="11" fontWeight="bold" fontFamily="monospace">{node.id}</text>
+            <circle cx={px} cy={py} r="5" fill="#ffffff" stroke="#0891b2" strokeWidth="1.5"/>
+            <text x={px+9} y={py-9} fill="#0891b2" fontSize="11" fontWeight="bold" fontFamily="monospace">{node.id}</text>
           </g>
         );
       })}
@@ -923,12 +984,12 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
         if (Math.abs(ld.Fz)>1e-9) {
           const sym = ld.Fz<0 ? '⊗' : '⊙';
           items.push(<g key="fz">
-            <text x={px-18} y={py-14} fill="#fb923c" fontSize="18" fontWeight="bold">{sym}</text>
-            <text x={px-35} y={py-2} fill="#fb923c" fontSize="10" fontFamily="monospace">{fmt(ld.Fz,1)}</text>
+            <text x={px-18} y={py-14} fill="#ea580c" fontSize="18" fontWeight="bold">{sym}</text>
+            <text x={px-35} y={py-2} fill="#ea580c" fontSize="10" fontFamily="monospace">{fmt(ld.Fz,1)}</text>
           </g>);
         }
         if (Math.abs(ld.Mx)>1e-9 || Math.abs(ld.My)>1e-9) {
-          items.push(<text key="m" x={px+12} y={py+22} fill="#a78bfa" fontSize="9" fontFamily="monospace">M({fmt(ld.Mx,1)},{fmt(ld.My,1)})</text>);
+          items.push(<text key="m" x={px+12} y={py+22} fill="#7c3aed" fontSize="9" fontFamily="monospace">M({fmt(ld.Mx,1)},{fmt(ld.My,1)})</text>);
         }
         return <g key={`load-${node.id}`}>{items}</g>;
       })}
@@ -937,7 +998,7 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
 }
 
 // Mini-wykres Mz dla pojedynczego pręta - SVG z wartościami przy końcach
-function MiniDiagram({M1, M2, q, L, color='#22d3ee', suffix='', title=''}) {
+function MiniDiagram({M1, M2, q, L, color='#0891b2', suffix='', title=''}) {
   const w = 110, h = 70;
   const pad = 10;
   const baseY = h * 0.6;
@@ -969,7 +1030,7 @@ function MiniDiagram({M1, M2, q, L, color='#22d3ee', suffix='', title=''}) {
   }
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-slate-950/60 rounded">
-      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#475569" strokeWidth="1.5"/>
+      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#16243a" strokeWidth="1.5"/>
       <polygon points={polyStr} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
       <line x1={pad} y1={baseY} x2={pad} y2={baseY - M1*yScale} stroke={color} strokeWidth="1"/>
       <line x1={w-pad} y1={baseY} x2={w-pad} y2={baseY - M2*yScale} stroke={color} strokeWidth="1"/>
@@ -979,13 +1040,13 @@ function MiniDiagram({M1, M2, q, L, color='#22d3ee', suffix='', title=''}) {
         <circle cx={peakInfo.x} cy={peakInfo.y} r="2" fill={color}/>
         <text x={peakInfo.x} y={peakInfo.y + (peakInfo.val>=0 ? -4 : 11)} fontSize="9" fill={color} fontFamily="monospace" textAnchor="middle">{fmt(peakInfo.val,2)}{suffix}</text>
       </>}
-      {title && <text x={w/2} y={h-2} fontSize="9" fill="#64748b" fontFamily="monospace" textAnchor="middle">{title}</text>}
+      {title && <text x={w/2} y={h-2} fontSize="9" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
     </svg>
   );
 }
 
 // Mini-wykres Ms (stałe wzdłuż pręta) - prostokąt
-function MiniRect({T, L, color='#fb923c', suffix='', title=''}) {
+function MiniRect({T, L, color='#ea580c', suffix='', title=''}) {
   const w = 110, h = 70;
   const pad = 10;
   const baseY = h * 0.5;
@@ -994,13 +1055,13 @@ function MiniRect({T, L, color='#fb923c', suffix='', title=''}) {
   const top = baseY - T*yScale;
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-slate-950/60 rounded">
-      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#475569" strokeWidth="1.5"/>
+      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#16243a" strokeWidth="1.5"/>
       {Math.abs(T) > 1e-9 && <>
         <rect x={pad} y={Math.min(baseY, top)} width={w-2*pad} height={Math.abs(top-baseY)} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
         <text x={pad+2} y={top + (T>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(T,2)}{suffix}</text>
         <text x={w-pad-2} y={top + (T>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(T,2)}{suffix}</text>
       </>}
-      {title && <text x={w/2} y={h-2} fontSize="9" fill="#64748b" fontFamily="monospace" textAnchor="middle">{title}</text>}
+      {title && <text x={w/2} y={h-2} fontSize="9" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
     </svg>
   );
 }
@@ -1027,8 +1088,8 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
     const s1 = classifyShape(M1a, M1b, q1, b.L);
     const mzInfo = multiplicationFormula(s0, s1, b.L, sym, i0, i1);
     const msVal = T0 * T1 * b.L;
-    const colorMz0 = '#22d3ee', colorMz1 = '#a78bfa';
-    const colorMs0 = '#fb923c', colorMs1 = '#f472b6';
+    const colorMz0 = '#0891b2', colorMz1 = '#7c3aed';
+    const colorMs0 = '#ea580c', colorMs1 = '#db2777';
     return (
       <div key={`b${idx}`} className="bg-slate-900/60 rounded-lg p-3 border border-slate-800">
         <div className="text-[11px] font-mono text-slate-300 mb-2">
@@ -1409,7 +1470,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100" style={{fontFamily:'ui-sans-serif, system-ui, sans-serif'}}>
+    <div className="min-h-screen text-slate-100" style={{fontFamily:'ui-sans-serif, system-ui, sans-serif'}}>
       <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10 no-print">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -1431,7 +1492,7 @@ function App() {
             <button onClick={exportSchema} className="text-xs px-3 py-1.5 rounded text-slate-300 hover:text-cyan-300 hover:bg-cyan-950/30 flex items-center gap-1.5 border border-slate-700"><Save size={14}/> Zapisz</button>
             <button onClick={reset} className="text-xs px-3 py-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 flex items-center gap-1.5"><RotateCcw size={14}/> Reset</button>
             {results && <button onClick={handlePrint} className="text-xs px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 border border-slate-700"><Printer size={14}/> Drukuj</button>}
-            <button onClick={calculate} className="text-xs px-4 py-1.5 rounded bg-cyan-500 text-slate-950 font-semibold hover:bg-cyan-400 flex items-center gap-1.5 shadow-lg shadow-cyan-500/20"><Play size={14} fill="currentColor"/> Oblicz</button>
+            <button onClick={calculate} className="text-xs px-4 py-1.5 rounded bg-cyan-500 text-slate-100 font-semibold hover:bg-cyan-400 flex items-center gap-1.5 shadow-lg shadow-cyan-500/20"><Play size={14} fill="currentColor"/> Oblicz</button>
           </div>
         </div>
       </header>

@@ -598,10 +598,50 @@ function applyConfig(cfg){
   Object.keys(cfg.fields||{}).forEach(id=>{ const e=$(id); if(e) e.value=cfg.fields[id]; });
   refreshUI(); renderScheme();
 }
+/* ---------- etykieta wariantu: kluczowe dane przy nazwie ---------- */
+const CFG_SUP={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+function cfgSupNum(n){ return String(n).split('').map(c=>CFG_SUP[c]||c).join(''); }
+function cfgFmtD(dv){            // 300000 → "3·10⁵", 1500 → "1500"
+  if(!isFinite(dv)||dv<=0) return '';
+  const exp=Math.floor(Math.log10(dv)+1e-9);
+  if(exp>=4 || exp<=-2){
+    const mant=Math.round((dv/Math.pow(10,exp))*100)/100;
+    return (mant===1?'':mant+'·')+'10'+cfgSupNum(exp);
+  }
+  return sf(dv);
+}
+function cfgSupFull(t){ return {clamped:'utwierdzenie',pinned:'podpora przegubowa',free:'brzeg swobodny',guided:'utwierdzenie ślizgowe'}[t]||t; }
+function cfgHas(v){ return v!==undefined && v!==null && v!==''; }
+function cfgSummary(cfg){        // "D=3·10⁵, q=8 kN/m², a=5, b=10, podpora pierścieniowa"
+  if(!cfg||!cfg.fields) return '';
+  const f=cfg.fields, p=[];
+  if(f.Dmode==='num'){ const dv=parseFloat(f.Dval); if(isFinite(dv)&&dv>0) p.push('D='+cfgFmtD(dv)); }
+  if(cfg.mode==='solid'){
+    if(cfgHas(f.q1s)) p.push('q='+f.q1s+' kN/m²');
+    if(cfgHas(f.R)) p.push('R='+f.R);
+    if(f.outer_type) p.push(cfgSupFull(f.outer_type));
+  } else if(cfg.mode==='annulus'){
+    if(cfgHas(f.q1a)) p.push('q='+f.q1a+' kN/m²');
+    if(cfgHas(f.a_ann)) p.push('a='+f.a_ann);
+    if(cfgHas(f.b_ann)) p.push('b='+f.b_ann);
+    if(f.outer_type) p.push(cfgSupFull(f.outer_type));
+  } else if(cfg.mode==='two'){
+    const qi=f.q1t, qo=f.q2t;
+    if(cfgHas(qi)) p.push('q='+((cfgHas(qo)&&qo!==qi)?qi+'/'+qo:qi)+' kN/m²');
+    if(cfgHas(f.a_two)) p.push('a='+f.a_two);
+    if(cfgHas(f.b_two)) p.push('b='+f.b_two);
+    if(f.iface_type) p.push(f.iface_type==='ring'?'podpora pierścieniowa':'ciągłość');
+  }
+  return p.join(', ');
+}
+function cfgEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function cfgRefreshList(sel){
   const store=cfgStore(); const names=Object.keys(store).sort((a,b)=>a.localeCompare(b,'pl'));
   const list=$('cfgList');
-  list.innerHTML = names.length ? names.map(n=>'<option>'+n.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</option>').join('') : '<option value="">— brak zapisanych —</option>';
+  list.innerHTML = names.length ? names.map(n=>{
+    const sum=cfgSummary(store[n]);
+    return '<option value="'+cfgEsc(n)+'">'+cfgEsc(n)+(sum?' — '+cfgEsc(sum):'')+'</option>';
+  }).join('') : '<option value="">— brak zapisanych —</option>';
   if(sel && names.indexOf(sel)>=0) list.value=sel;
 }
 function cfgMsg(t){ $('cfgMsg').textContent=t||''; if(t) setTimeout(()=>{ if($('cfgMsg').textContent===t)$('cfgMsg').textContent=''; },3500); }

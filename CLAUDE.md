@@ -1,4 +1,4 @@
-# STATIKA — kalkulatory konstrukcyjne
+# MECHANIKA — kalkulatory akademickie
 
 Statyczna strona z darmowymi kalkulatorami inżynierskimi (statyka i wytrzymałość
 materiałów), licząca wszystko **lokalnie w przeglądarce** — bez backendu, bez
@@ -18,7 +18,7 @@ logowania, bez wysyłania danych. Interfejs w języku polskim.
 - `index.html` — **powłoka** z zakładkami (jasny motyw „papierowy" spójny z
   kalkulatorami: kremowe tło `#fbfaf5` + siatka 22px, atrament `#16243a`,
   akcenty niebieski/zielony/złoty; tekst szeryfowy, IBM Plex Mono na elementy
-  techniczne; marka „STATIKA"). Ładuje kalkulatory w `<iframe>`.
+  techniczne; marka „MECHANIKA"). Ładuje kalkulatory w `<iframe>`.
 - `solver-rusztow.html` — solver rusztów płaskich (MES): reakcje, siły wewnętrzne,
   wykresy Mz/Ms, graficzne mnożenie Wereszczagina. **React + Tailwind przez CDN**,
   JSX kompilowany w locie przez Babel standalone.

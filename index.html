@@ -212,10 +212,6 @@
     <span class="word"><b id="brandName">STATIKA</b><span id="brandTag">kalkulatory konstrukcyjne</span></span>
   </a>
   <span class="spacer"></span>
-  <a class="support" id="supportBtn" href="#" target="_blank" rel="noopener">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>
-    Wesprzyj projekt
-  </a>
 </header>
 
 <nav class="tabs" id="tabs"></nav>
@@ -227,40 +223,14 @@
 <footer>
   <span id="footYear">© 2026 STATIKA</span>
   <span class="spacer" style="flex:1"></span>
-  <span>narzędzia darmowe · jeśli pomogły — <a id="footSupport" href="#" target="_blank" rel="noopener">postaw kawę ☕</a></span>
+  <span>narzędzia darmowe · liczone lokalnie w przeglądarce</span>
 </footer>
-
-<!-- DONATION MODAL -->
-<div class="overlay" id="overlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="head">
-      <div class="ico" aria-hidden="true">☕</div>
-      <h3 id="modalTitle">Podobają Ci się te kalkulatory?</h3>
-    </div>
-    <div class="body">
-      <p>Cieszę się, że są przydatne! Utrzymuję je za darmo dla wszystkich. Jeśli oszczędziły Ci trochę czasu, możesz wrzucić parę groszy — choćby na utrzymanie domeny. Każda wpłata to ogromna motywacja do rozwijania kolejnych narzędzi.</p>
-    </div>
-    <div class="acts">
-      <a class="btn-primary" id="modalDonate" href="#" target="_blank" rel="noopener">Postaw kawę / Wesprzyj ☕</a>
-      <div class="btn-row">
-        <button class="btn-ghost" id="modalLater">Może później</button>
-        <button class="btn-ghost" id="modalNever">Nie pokazuj więcej</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
 /* ============================================================
    KONFIGURACJA  —  edytuj tutaj
    ============================================================ */
 const BRAND = { name:"STATIKA", tagline:"kalkulatory konstrukcyjne" };
-
-// ▶ Podmień na swój link do wpłat (buycoffee.to / Stripe / PayPal / itp.)
-const DONATION_URL = "https://buycoffee.to/twoj-profil";
-
-// Po ilu kliknięciach „Oblicz" (łącznie, we wszystkich zakładkach) pokazać okienko:
-const DONATION_THRESHOLD = 5;
 
 const TABS = [
   { id:"start",       label:"Start",          status:"home" },
@@ -298,7 +268,6 @@ document.title = BRAND.name + " — " + BRAND.tagline;
 $("brandName").textContent = BRAND.name;
 $("brandTag").textContent = BRAND.tagline;
 $("footYear").textContent = "© " + new Date().getFullYear() + " " + BRAND.name;
-[$("supportBtn"), $("footSupport"), $("modalDonate")].forEach(a => a.href = DONATION_URL);
 
 // --- zakładki ---
 TABS.forEach((t, i) => {
@@ -361,7 +330,6 @@ function ensureFrame(t){
     stage.appendChild(wrap);
     const iframe = wrap.querySelector("iframe");
     iframe.src = t.src;                 // ładowane dopiero przy pierwszym wejściu
-    attachCalcCounter(iframe);          // zliczanie kliknięć „Oblicz"
     frames[t.id] = wrap;
     f = wrap;
   }
@@ -396,54 +364,6 @@ window.addEventListener("hashchange", () => {
 
 // start: z hasha albo „start"
 go(location.hash.slice(1) || "start");
-
-/* ============================================================
-   OKIENKO Z WPŁATĄ — po DONATION_THRESHOLD kliknięciach „Oblicz"
-   (zliczane bez modyfikacji kalkulatorów, przez nasłuch w iframe)
-   ============================================================ */
-const LS_COUNT = "statika_calc_count";
-const LS_NEVER = "statika_donate_never";
-const LS_SNOOZE = "statika_donate_snooze";   // do jakiego licznika nie pokazywać
-
-function getN(k){ try{ return parseInt(localStorage.getItem(k)||"0",10)||0; }catch(e){ return 0; } }
-function setN(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
-function flag(k){ try{ return localStorage.getItem(k)==="1"; }catch(e){ return false; } }
-
-function bumpCalc(){
-  if(flag(LS_NEVER)) return;
-  const n = getN(LS_COUNT) + 1;
-  setN(LS_COUNT, n);
-  const snooze = getN(LS_SNOOZE);
-  if(n >= DONATION_THRESHOLD && n >= snooze){ showModal(); }
-}
-
-// Nasłuch kliknięć „Oblicz" wewnątrz iframe (działa przy serwowaniu z jednego origin).
-function attachCalcCounter(iframe){
-  iframe.addEventListener("load", () => {
-    try{
-      const doc = iframe.contentDocument;
-      if(!doc) return;                       // inny origin (np. file://) — pomijamy
-      doc.addEventListener("click", (e) => {
-        const btn = e.target.closest && e.target.closest("button,.btn,input[type=button],input[type=submit]");
-        if(!btn) return;
-        const txt = (btn.textContent || btn.value || "").toLowerCase();
-        if(/oblicz/.test(txt)) bumpCalc();
-      }, true);
-    }catch(err){ /* cross-origin — okienko można też wywołać ręcznie */ }
-  });
-}
-
-// modal
-const overlay = $("overlay");
-function showModal(){ overlay.classList.add("show"); }
-function hideModal(){ overlay.classList.remove("show"); }
-$("modalLater").addEventListener("click", () => {           // przypomnij za kolejne THRESHOLD
-  setN(LS_SNOOZE, getN(LS_COUNT) + DONATION_THRESHOLD); hideModal();
-});
-$("modalNever").addEventListener("click", () => { try{ localStorage.setItem(LS_NEVER,"1"); }catch(e){} hideModal(); });
-$("modalDonate").addEventListener("click", () => { setN(LS_SNOOZE, getN(LS_COUNT) + 9999); hideModal(); });
-overlay.addEventListener("click", e => { if(e.target === overlay) hideModal(); });
-document.addEventListener("keydown", e => { if(e.key === "Escape") hideModal(); });
 </script>
 </body>
 </html>

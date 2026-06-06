@@ -161,6 +161,12 @@
     <div class="scheme-legend">Rysunek odświeża się przy każdej zmianie. <b>Czerwone</b> — obciążenie / siły / momenty, <b>niebieskie</b> — wymiary, <b>zielona linia</b> — oś symetrii (r=0).</div>
   </div>
   <div class="panel no-print">
+    <fieldset id="fs-preset" style="margin-bottom:6px">
+      <legend>📋 Warianty z zadania (PP2)</legend>
+      <label>Gotowy przykład — ustawia wszystkie pola i od razu liczy</label>
+      <select id="presetList"></select>
+      <div class="note">Wbudowane przykłady (niezależne od „Zapisanych układów"). Po wybraniu wariant od razu się przelicza — potem możesz zmienić dowolne pole i kliknąć „OBLICZ".</div>
+    </fieldset>
     <label>Rodzaj układu</label>
     <div class="modecards" id="modecards">
       <div class="modecard on" data-mode="solid">
@@ -967,6 +973,53 @@ function fmtMark(v){ if(Math.abs(v)<1e-9)return '0'; const a=Math.abs(v);
   return parseFloat(v.toPrecision(3)).toString(); }
 function fmtAxis(v){ if(Math.abs(v)<1e-9)return '0'; const a=Math.abs(v);
   if(a>=100)return v.toFixed(0); if(a>=1)return v.toFixed(2); return v.toFixed(3); }
+
+/* ====================== WBUDOWANE WARIANTY (PP2) ====================== */
+/* Wspólnie: tryb "two", ν=0.3, D liczbowe, obciążenie tylko na pierścieniu
+   zewnętrznym (q wewn.=0, q zewn.=q), wszystkie M/P = 0. */
+const PP2_PRESETS = [
+  {D:200000,q:1,a:5,b:10,iface:'cont',outer:'pinned'},
+  {D:250000,q:2,a:6,b:14,iface:'cont',outer:'clamped'},
+  {D:200000,q:3,a:4,b:10,iface:'ring',outer:'free'},
+  {D:300000,q:4,a:6,b:12,iface:'cont',outer:'pinned'},
+  {D:250000,q:5,a:3,b:9, iface:'cont',outer:'clamped'},
+  {D:350000,q:6,a:6,b:11,iface:'ring',outer:'free'},
+  {D:300000,q:7,a:6,b:11,iface:'cont',outer:'clamped'},
+  {D:300000,q:8,a:5,b:10,iface:'ring',outer:'free'},
+  {D:300000,q:9,a:6,b:15,iface:'cont',outer:'clamped'},
+  {D:250000,q:1,a:6,b:12,iface:'cont',outer:'clamped'},
+  {D:200000,q:2,a:8,b:12,iface:'ring',outer:'free'},
+  {D:250000,q:3,a:7,b:14,iface:'cont',outer:'pinned'},
+  {D:200000,q:4,a:6,b:14,iface:'cont',outer:'clamped'},
+  {D:250000,q:5,a:3,b:10,iface:'cont',outer:'clamped'},
+  {D:250000,q:6,a:5,b:14,iface:'ring',outer:'free'},
+  {D:300000,q:7,a:6,b:15,iface:'cont',outer:'clamped'},
+];
+function pp2Config(p){
+  return {mode:'two', fields:{
+    nu:'0.3', Dmode:'num', Dval:String(p.D),
+    a_two:String(p.a), b_two:String(p.b),
+    q1t:'0', q2t:String(p.q),                       // q tylko na zewnętrznym pierścieniu
+    iface_type:p.iface, iface_M:'0', iface_P:'0',
+    outer_type:p.outer, outer_M:'0', outer_P:'0'
+  }};
+}
+function pp2Label(p,i){
+  const styk = p.iface==='ring' ? 'podpora pierścieniowa' : 'ciągłość';
+  return 'Wariant '+(i+1)+' — D='+cfgFmtD(p.D)+', q='+p.q+' kN/m², a='+p.a+', b='+p.b+', '+styk;
+}
+function pp2Load(i){
+  const p=PP2_PRESETS[i]; if(!p) return;
+  applyConfig(pp2Config(p));        // ustawia tryb + pola, odświeża UI i schemat
+  $('presetList').value=String(i);
+  $('go').click();                  // od razu licz
+}
+(function initPresets(){
+  const sel=$('presetList'); if(!sel) return;
+  sel.innerHTML = PP2_PRESETS.map((p,i)=>'<option value="'+i+'">'+cfgEsc(pp2Label(p,i))+'</option>').join('');
+  sel.onchange=()=>{ if(sel.value!=='') pp2Load(parseInt(sel.value,10)); };
+  pp2Load(0);                       // „nie pusty start" — domyślnie Wariant 1
+})();
 </script>
 </body>
 </html>

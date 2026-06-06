@@ -27,14 +27,19 @@ logowania, bez wysyłania danych. Interfejs w języku polskim.
 
 ## Mapa kalkulatorów (status w `index.html` → `TABS`)
 
+Na ten tydzień publikujemy **tylko dwa gotowe kalkulatory**. Wpisy „soon"
+(Belki, Ramy, Reakcje podporowe, Przesunięcia/ugięcia) zostały **usunięte z
+`TABS`** — dodajemy je pojedynczo później, gdy kalkulator jest gotowy. Gotowe
+definicje tych wpisów są w historii gita.
+
 | Moduł          | Status   | Plik                  |
 |----------------|----------|-----------------------|
 | Ruszty         | `ready`  | `solver-rusztow.html` |
 | Płyty okrągłe  | `ready`  | `plyty-okragle.html`  |
-| Belki          | `soon`   | —                     |
-| Ramy           | `soon`   | —                     |
-| Reakcje        | `soon`   | —                     |
-| Przesunięcia   | `soon`   | —                     |
+| Belki          | planowane (poza `TABS`) | —      |
+| Ramy           | planowane (poza `TABS`) | —      |
+| Reakcje        | planowane (poza `TABS`) | —      |
+| Przesunięcia   | planowane (poza `TABS`) | —      |
 
 ## Konwencje
 

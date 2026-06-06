@@ -240,18 +240,8 @@ const TABS = [
   { id:"plyty",       label:"Płyty okrągłe",  status:"ready", type:"iframe", src:"plyty-okragle.html",
     title:"Płyty okrągłe",
     desc:"Zginanie osiowo-symetrycznych płyt kołowych i pierścieniowych: ugięcia, momenty i siły poprzeczne, krok po kroku, z wykresami." },
-  { id:"belki",       label:"Belki",          status:"soon",
-    title:"Belki",
-    desc:"Belki statycznie wyznaczalne i niewyznaczalne: reakcje, siły tnące i momenty zginające wraz z wykresami." },
-  { id:"ramy",        label:"Ramy",           status:"soon",
-    title:"Ramy",
-    desc:"Ramy płaskie: wyznaczanie sił wewnętrznych oraz wykresy M, V i N dla zadanego schematu i obciążeń." },
-  { id:"reakcje",     label:"Reakcje",        status:"soon",
-    title:"Reakcje podporowe",
-    desc:"Szybkie obliczanie reakcji podporowych dla dowolnego układu sił skupionych, rozłożonych i momentów." },
-  { id:"przesuniecia",label:"Przesunięcia",   status:"soon",
-    title:"Przesunięcia i ugięcia",
-    desc:"Ugięcia i kąty obrotu wybranych przekrojów — metoda całkowa oraz graficzne mnożenie wykresów (Wereszczagin)." },
+  // Kolejne moduły (Belki, Ramy, Reakcje, Przesunięcia) dodajemy pojedynczo
+  // później — patrz historia gita po gotowe wpisy „soon".
 ];
 
 /* ============================================================
@@ -289,8 +279,8 @@ function buildHome(){
   wrap.innerHTML = `
     <div class="hero">
       <div class="kicker">obliczenia konstrukcyjne · w przeglądarce · za darmo</div>
-      <h1>Komplet narzędzi do <em>statyki i wytrzymałości</em> w jednym miejscu.</h1>
-      <p>Zestaw kalkulatorów inżynierskich — od rusztów i płyt okrągłych po belki, ramy i przesunięcia. Wszystko liczy się lokalnie w Twojej przeglądarce, bez logowania i bez wysyłania danych. Wybierz moduł poniżej lub z zakładek u góry.</p>
+      <h1>Narzędzia do <em>statyki i wytrzymałości</em> w jednym miejscu.</h1>
+      <p>Kalkulatory inżynierskie — solver rusztów płaskich (MES) oraz płyty okrągłe i pierścieniowe. Wszystko liczy się lokalnie w Twojej przeglądarce, bez logowania i bez wysyłania danych. Kolejne moduły w przygotowaniu. Wybierz kalkulator poniżej lub z zakładek u góry.</p>
     </div>
     <div class="grid">
       ${mods.map((m,k)=>`

@@ -24,21 +24,25 @@ logowania, bez wysyłania danych. Interfejs w języku polskim.
   JSX kompilowany w locie przez Babel standalone.
 - `plyty-okragle.html` — kalkulator płyt okrągłych/pierścieniowych (zginanie
   osiowo-symetryczne). **Vanilla JS**, bez zależności.
+- `reakcje.html` — kalkulator reakcji podporowych belek statycznie wyznaczalnych
+  (równania równowagi ΣFx/ΣFy/ΣM, kontrola wyznaczalności, równania krok po kroku,
+  schemat belki w SVG, 6 wbudowanych przykładów). **Vanilla JS + SVG**, bez zależności.
+  **Strona ukryta:** celowo poza `TABS` — brak zakładki i kafelka; dostępna wyłącznie
+  pod bezpośrednim adresem `/reakcje.html`.
 
 ## Mapa kalkulatorów (status w `index.html` → `TABS`)
 
-Na ten tydzień publikujemy **tylko dwa gotowe kalkulatory**. Wpisy „soon"
-(Belki, Ramy, Reakcje podporowe, Przesunięcia/ugięcia) zostały **usunięte z
-`TABS`** — dodajemy je pojedynczo później, gdy kalkulator jest gotowy. Gotowe
-definicje tych wpisów są w historii gita.
+Publikujemy gotowe kalkulatory pojedynczo. Pozostałe wpisy „soon"
+(Belki, Ramy, Przesunięcia/ugięcia) są **poza `TABS`** — dodajemy je później,
+gdy kalkulator jest gotowy. Gotowe definicje tych wpisów są w historii gita.
 
 | Moduł          | Status   | Plik                  |
 |----------------|----------|-----------------------|
 | Ruszty         | `ready`  | `solver-rusztow.html` |
 | Płyty okrągłe  | `ready`  | `plyty-okragle.html`  |
+| Reakcje        | ukryty (poza `TABS`, tylko `/reakcje.html`) | `reakcje.html` |
 | Belki          | planowane (poza `TABS`) | —      |
 | Ramy           | planowane (poza `TABS`) | —      |
-| Reakcje        | planowane (poza `TABS`) | —      |
 | Przesunięcia   | planowane (poza `TABS`) | —      |
 
 ## Konwencje

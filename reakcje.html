@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reakcje podporowe — kalkulator belek</title>
+<style>
+  :root{
+    --ink:#16243a; --paper:#fbfaf5; --line:#c9d6e3; --grid:#dde7ef;
+    --blue:#1f3a93; --red:#b6312a; --green:#27632a; --gold:#a9772b;
+    --card:#ffffff; --muted:#5a6b80;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    color:var(--ink); background:var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:22px 22px;
+    line-height:1.5; padding:0 0 80px;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:0 16px}
+  header.top{border-bottom:2px solid var(--ink); margin-top:18px; padding-bottom:10px;}
+  header.top h1{font-size:1.5rem;margin:0 0 2px;letter-spacing:.3px}
+  header.top .sub{color:var(--muted);font-size:.9rem;font-style:italic}
+  h2.sec{
+    font-size:1.05rem;margin:26px 0 10px;padding-bottom:4px;
+    border-bottom:1px dashed var(--line); color:var(--blue);
+    display:flex;align-items:center;gap:8px;
+  }
+  h2.sec .n{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;
+    background:var(--blue);color:#fff;border-radius:4px;padding:1px 7px;
+  }
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:14px 14px 16px;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  label{display:block;font-size:.82rem;color:var(--muted);margin:10px 0 3px;font-style:italic}
+  input,select{
+    width:100%;font:inherit;font-size:.95rem;padding:8px 10px;border:1px solid var(--line);
+    border-radius:7px;background:#eef2f7;color:var(--ink)
+  }
+  input:focus,select:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:var(--blue);background:#fff}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  fieldset{border:1px solid var(--line);border-radius:8px;margin:14px 0 0;padding:8px 12px 12px}
+  legend{font-size:.8rem;color:var(--blue);font-weight:600;padding:0 6px;font-style:normal}
+  .btn{
+    margin-top:18px;width:100%;font:inherit;font-weight:700;font-size:1.05rem;
+    background:var(--red);color:#fff;border:none;border-radius:9px;padding:14px;cursor:pointer;
+    letter-spacing:.5px;box-shadow:0 2px 0 #7e201b;transition:.1s
+  }
+  .btn:active{transform:translateY(2px);box-shadow:0 0 0 #7e201b}
+  .btns{font:inherit;font-weight:600;font-size:.9rem;background:var(--blue);color:#fff;border:none;border-radius:7px;padding:9px 8px;cursor:pointer;width:100%}
+  .btns.alt{background:#6b7280}
+  .btns.del{background:#8a3b34;width:auto;padding:7px 11px}
+  .btns:active{transform:translateY(1px)}
+  .addbtn{margin-top:10px;background:var(--green);width:100%}
+  .hide{display:none !important}
+  /* dynamiczne wiersze */
+  .item{border:1px solid var(--line);border-radius:8px;padding:8px 10px 10px;margin:8px 0;background:#fcfdff;position:relative}
+  .item .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .item .hd .t{font-size:.8rem;color:var(--blue);font-weight:600;font-style:normal}
+  .grow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+  .grow.g3{grid-template-columns:1fr 1fr 1fr}
+  /* results */
+  #out{margin-top:8px}
+  .formula{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9rem;
+    background:#f3f1e8;border:1px solid var(--line);border-left:4px solid var(--blue);
+    padding:10px 12px 10px 26px;border-radius:6px;margin:8px 0;white-space:normal;overflow-wrap:break-word;text-indent:-14px
+  }
+  .formula .step{font-family:system-ui,-apple-system,sans-serif;font-style:italic;color:var(--muted);font-size:.78rem}
+  .formula b{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .formula .fl{display:block;text-indent:-14px;margin:2px 0}
+  .formula .fl.gap{margin-top:8px}
+  .result-const{
+    background:#fff;border:2px solid var(--red);border-radius:8px;padding:12px 14px;margin:10px 0;
+    font-family:ui-monospace,Menlo,Consolas,monospace
+  }
+  .result-const .ttl{font-family:inherit;font-style:italic;color:var(--red);font-size:.82rem;margin-bottom:6px;font-weight:600}
+  .result-const div.c{font-size:1.02rem;padding:4px 0;border-bottom:1px dotted var(--line)}
+  .result-const div.c:last-child{border:none}
+  .result-const .sub{font-size:.78rem;color:var(--muted);font-style:italic}
+  .note{font-size:.82rem;color:var(--muted);font-style:italic;margin:6px 2px}
+  .err{background:#fff0ef;border:1px solid var(--red);color:var(--red);padding:12px;border-radius:8px;margin:10px 0}
+  .err b{color:var(--red)}
+  .ok-check{font-size:.82rem;color:var(--green);font-style:italic;margin:6px 2px}
+  .scheme-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px;margin:0 0 12px;
+    box-shadow:0 1px 0 rgba(0,0,0,.03);overflow-x:auto}
+  .scheme-card .cap{font-size:.8rem;color:var(--muted);font-style:italic;margin:2px 6px 0;display:flex;justify-content:space-between;align-items:center}
+  .scheme-card svg{width:100%;height:auto;min-width:360px;display:block}
+  .scheme-legend{font-size:.72rem;color:var(--muted);margin:2px 6px 4px}
+  .scheme-legend b{color:var(--ink);font-weight:600}
+  .print-only{display:none}
+  @media(min-width:640px){ .scheme-card svg{min-width:0} }
+  @media print{
+    @page{margin:14mm}
+    html,body{background:#fff !important;background-image:none !important;height:auto !important;min-height:0 !important;overflow:visible !important}
+    .wrap{max-width:100%;padding:0;overflow:visible !important}
+    header.top, .no-print, .scheme-legend{display:none !important}
+    .print-only{display:block !important}
+    h2.sec{page-break-after:avoid;break-after:avoid;border-color:#999}
+    h2.sec .n{display:none}
+    .formula,.result-const,.scheme-card{page-break-inside:avoid;break-inside:avoid}
+    .formula,.result-const{background:#fff !important}
+    .scheme-card{box-shadow:none !important;border-color:#bbb !important;overflow:visible !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Reakcje podporowe — belki</h1>
+    <div class="sub">Statycznie wyznaczalne belki · równania równowagi ΣF<sub>x</sub>=0, ΣF<sub>y</sub>=0, ΣM=0</div>
+  </header>
+
+  <h2 class="sec no-print"><span class="n">1</span>Zamodeluj belkę</h2>
+
+  <div class="print-only" id="print_head" style="margin:0 0 10px;border-bottom:2px solid #16243a;padding-bottom:8px">
+    <div style="font-size:1.25rem;font-weight:700;color:#16243a">Obliczenie reakcji podporowych belki</div>
+    <div id="print_data" style="font-size:.9rem;color:#16243a;margin-top:3px"></div>
+  </div>
+
+  <div class="scheme-card">
+    <div class="cap"><span>Schemat statyczny belki</span></div>
+    <svg id="scheme" viewBox="0 0 760 260" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="scheme-legend">Rysunek odświeża się przy każdej zmianie. <b>Czerwone</b> — obciążenia, <b>niebieskie/zielone</b> — wyznaczone reakcje, <b>szare</b> — wymiary. Oś x w prawo, siły pionowe: w górę „+".</div>
+  </div>
+
+  <div class="panel no-print">
+    <fieldset style="margin-bottom:6px">
+      <legend>📋 Przykłady do wczytania</legend>
+      <div class="row" style="grid-template-columns:1fr auto;align-items:end">
+        <select id="exampleList"></select>
+        <button class="btns" id="loadExample" style="width:auto;padding:9px 14px">Wczytaj</button>
+      </div>
+    </fieldset>
+
+    <label for="L">Długość belki L [m]</label>
+    <input id="L" type="number" step="any" value="6">
+
+    <fieldset>
+      <legend>Podpory</legend>
+      <div id="supports"></div>
+      <button class="btns addbtn" id="addSupport">+ dodaj podporę</button>
+      <div class="note">Typy: <b>przesuwna</b> (1 reakcja V), <b>przegubowa/stała</b> (V + H), <b>utwierdzenie</b> (V + H + M). Suma niewiadomych musi wynosić 3.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Obciążenia</legend>
+      <div id="loads"></div>
+      <button class="btns addbtn" id="addLoad">+ dodaj obciążenie</button>
+      <div class="note">Konwencja znaków: siła pionowa w górę „+", w dół „−"; siła pozioma w prawo „+"; moment przeciwnie do ruchu wskazówek (CCW) „+".</div>
+    </fieldset>
+
+    <button class="btn" id="go">Oblicz reakcje</button>
+  </div>
+
+  <h2 class="sec"><span class="n">2</span>Wyniki</h2>
+  <div id="out"></div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const SVGNS = "http://www.w3.org/2000/svg";
+
+/* ====================== FORMATOWANIE ====================== */
+function fmt(v){
+  if(!isFinite(v)) return "—";
+  if(Math.abs(v) < 1e-9) v = 0;
+  let s = (Math.round(v*1000)/1000).toString();
+  return s;
+}
+function signNum(v){ // " + 10" / " − 10"
+  const a = fmt(Math.abs(v));
+  return (v<0 ? " − " : " + ") + a;
+}
+function letter(i){ return String.fromCharCode(65 + i); } // A, B, C...
+
+/* ====================== MODEL <-> DOM ====================== */
+const SUP_TYPES = [
+  {v:"roller", t:"przesuwna (V)"},
+  {v:"pin",    t:"przegubowa / stała (V, H)"},
+  {v:"fixed",  t:"utwierdzenie (V, H, M)"},
+];
+
+function supportRow(s){
+  s = s || {x:0, type:"roller"};
+  const el = document.createElement("div");
+  el.className = "item";
+  el.dataset.kind = "support";
+  el.innerHTML =
+    '<div class="hd"><span class="t">Podpora</span>'+
+    '<button class="btns del" type="button">usuń</button></div>'+
+    '<div class="grow">'+
+      '<div><label>Pozycja x [m]</label><input class="sx" type="number" step="any"></div>'+
+      '<div><label>Typ</label><select class="st">'+
+        SUP_TYPES.map(o=>'<option value="'+o.v+'">'+o.t+'</option>').join('')+
+      '</select></div>'+
+    '</div>';
+  el.querySelector(".sx").value = s.x;
+  el.querySelector(".st").value = s.type;
+  el.querySelector(".del").addEventListener("click", ()=>{ el.remove(); liveDraw(); });
+  el.addEventListener("input", liveDraw);
+  return el;
+}
+
+const LOAD_KINDS = [
+  {v:"P", t:"siła skupiona P"},
+  {v:"q", t:"obciążenie równomierne q"},
+  {v:"M", t:"moment skupiony M"},
+];
+
+function loadFields(kind, l){
+  if(kind==="P"){
+    return '<div class="grow g3">'+
+      '<div><label>Pozycja x [m]</label><input class="lx" type="number" step="any" value="'+(l.x??0)+'"></div>'+
+      '<div><label>Pionowa P_y [kN] (↑+ ↓−)</label><input class="lpy" type="number" step="any" value="'+(l.Py??0)+'"></div>'+
+      '<div><label>Pozioma P_x [kN] (→+)</label><input class="lpx" type="number" step="any" value="'+(l.Px??0)+'"></div>'+
+    '</div>';
+  }
+  if(kind==="q"){
+    return '<div class="grow g3">'+
+      '<div><label>Od x₁ [m]</label><input class="lx1" type="number" step="any" value="'+(l.x1??0)+'"></div>'+
+      '<div><label>Do x₂ [m]</label><input class="lx2" type="number" step="any" value="'+(l.x2??0)+'"></div>'+
+      '<div><label>q [kN/m] (↑+ ↓−)</label><input class="lw" type="number" step="any" value="'+(l.w??0)+'"></div>'+
+    '</div>';
+  }
+  // M
+  return '<div class="grow">'+
+    '<div><label>Pozycja x [m]</label><input class="lx" type="number" step="any" value="'+(l.x??0)+'"></div>'+
+    '<div><label>M [kN·m] (CCW+)</label><input class="lm" type="number" step="any" value="'+(l.M??0)+'"></div>'+
+  '</div>';
+}
+
+function loadRow(l){
+  l = l || {kind:"P", x:0, Py:0, Px:0};
+  const el = document.createElement("div");
+  el.className = "item";
+  el.dataset.kind = "load";
+  el.innerHTML =
+    '<div class="hd">'+
+      '<select class="lk" style="width:auto;flex:1">'+
+        LOAD_KINDS.map(o=>'<option value="'+o.v+'">'+o.t+'</option>').join('')+
+      '</select>'+
+      '<button class="btns del" type="button">usuń</button>'+
+    '</div>'+
+    '<div class="fields"></div>';
+  const sel = el.querySelector(".lk");
+  sel.value = l.kind;
+  const fields = el.querySelector(".fields");
+  fields.innerHTML = loadFields(l.kind, l);
+  sel.addEventListener("change", ()=>{
+    fields.innerHTML = loadFields(sel.value, {});
+    liveDraw();
+  });
+  el.querySelector(".del").addEventListener("click", ()=>{ el.remove(); liveDraw(); });
+  el.addEventListener("input", liveDraw);
+  return el;
+}
+
+function readModel(){
+  const L = parseFloat($("L").value);
+  const supports = [...$("supports").children].map(el=>({
+    x: parseFloat(el.querySelector(".sx").value),
+    type: el.querySelector(".st").value,
+  }));
+  const loads = [...$("loads").children].map(el=>{
+    const kind = el.querySelector(".lk").value;
+    if(kind==="P") return {kind, x:num(el,".lx"), Py:num(el,".lpy"), Px:num(el,".lpx")};
+    if(kind==="q") return {kind, x1:num(el,".lx1"), x2:num(el,".lx2"), w:num(el,".lw")};
+    return {kind:"M", x:num(el,".lx"), M:num(el,".lm")};
+  });
+  return {L, supports, loads};
+  function num(el,sel){ const v=parseFloat(el.querySelector(sel).value); return isFinite(v)?v:0; }
+}
+
+function setModel(m){
+  $("L").value = m.L;
+  const sc = $("supports"); sc.innerHTML = "";
+  m.supports.forEach(s=> sc.appendChild(supportRow(s)));
+  const lc = $("loads"); lc.innerHTML = "";
+  m.loads.forEach(l=> lc.appendChild(loadRow(l)));
+}
+
+/* ====================== SOLVER ====================== */
+// Niewiadome reakcji budujemy z typów podpór, w kolejności podpór.
+// Każda kolumna: {sup: index, comp: 'V'|'H'|'M'}
+function buildUnknowns(supports){
+  const u = [];
+  supports.forEach((s,i)=>{
+    if(s.type==="roller"){ u.push({sup:i, comp:"V"}); }
+    else if(s.type==="pin"){ u.push({sup:i, comp:"V"}); u.push({sup:i, comp:"H"}); }
+    else if(s.type==="fixed"){ u.push({sup:i, comp:"V"}); u.push({sup:i, comp:"H"}); u.push({sup:i, comp:"M"}); }
+  });
+  return u;
+}
+
+// Wkład obciążeń do [ΣFx, ΣFy, ΣM(o x=0)]
+function loadContrib(loads){
+  let Fx=0, Fy=0, M=0;
+  const resolved = []; // dla wyświetlenia
+  loads.forEach(l=>{
+    if(l.kind==="P"){
+      Fx += l.Px; Fy += l.Py; M += l.x*l.Py; // siła pozioma na osi y=0 nie daje momentu
+      resolved.push({type:"P", Px:l.Px, Py:l.Py, x:l.x});
+    } else if(l.kind==="q"){
+      const R = l.w*(l.x2 - l.x1);     // wypadkowa (pionowa, w górę +)
+      const xc = (l.x1 + l.x2)/2;
+      Fy += R; M += xc*R;
+      resolved.push({type:"q", R, xc, w:l.w, x1:l.x1, x2:l.x2});
+    } else { // moment skupiony
+      M += l.M;
+      resolved.push({type:"M", M:l.M, x:l.x});
+    }
+  });
+  return {Fx, Fy, M, resolved};
+}
+
+// Współczynnik kolumny unknown w równaniu eq (0=Fx,1=Fy,2=M o x=0)
+function coeff(u, supports, eq){
+  const xs = supports[u.sup].x;
+  if(u.comp==="V") return eq===1 ? 1 : (eq===2 ? xs : 0); // pionowa: Fy=1, M=xs
+  if(u.comp==="H") return eq===0 ? 1 : 0;                  // pozioma: Fx=1
+  if(u.comp==="M") return eq===2 ? 1 : 0;                  // para reakcyjna: tylko M
+  return 0;
+}
+
+// Rozwiązanie 3x3 (eliminacja Gaussa z częściowym wyborem elementu głównego)
+function solve3(A, b){
+  const M = A.map((r,i)=> r.concat(b[i]));
+  const n = 3;
+  for(let c=0;c<n;c++){
+    let piv=c;
+    for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[piv][c])) piv=r;
+    if(Math.abs(M[piv][c]) < 1e-9) return null; // osobliwy
+    [M[c],M[piv]]=[M[piv],M[c]];
+    for(let r=0;r<n;r++){
+      if(r===c) continue;
+      const f = M[r][c]/M[c][c];
+      for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k];
+    }
+  }
+  return [M[0][3]/M[0][0], M[1][3]/M[1][1], M[2][3]/M[2][2]];
+}
+
+function compute(){
+  const m = readModel();
+  const out = $("out");
+  out.innerHTML = "";
+  lastReactions = null;
+
+  // walidacja podstawowa
+  const errs = [];
+  if(!isFinite(m.L) || m.L<=0) errs.push("Podaj dodatnią długość belki L.");
+  if(m.supports.length===0) errs.push("Dodaj co najmniej jedną podporę.");
+  m.supports.forEach((s,i)=>{
+    if(!isFinite(s.x)) errs.push("Podpora "+letter(i)+": niepoprawna pozycja x.");
+    else if(s.x < -1e-9 || s.x > m.L+1e-9) errs.push("Podpora "+letter(i)+" (x="+fmt(s.x)+") leży poza belką [0, "+fmt(m.L)+"].");
+  });
+  if(errs.length){ showErr("Sprawdź dane wejściowe", errs); draw(m,null); return; }
+
+  // wyznaczalność: liczba niewiadomych
+  const unknowns = buildUnknowns(m.supports);
+  const nU = unknowns.length;
+  if(nU !== 3){
+    const diag = nU<3
+      ? "Układ jest <b>geometrycznie zmienny (mechanizm)</b> — za mało więzów."
+      : "Układ jest <b>statycznie niewyznaczalny (przesztywniony)</b> — za dużo więzów; do rozwiązania potrzebne są równania odkształceniowe.";
+    showErr("Belka nie jest statycznie wyznaczalna", [
+      "Liczba niewiadomych reakcji = <b>"+nU+"</b>, a powinna wynosić <b>3</b>.",
+      diag,
+      "Zmień typy/liczbę podpór tak, aby suma reakcji wynosiła dokładnie 3 (np. przegubowa + przesuwna, albo samo utwierdzenie)."
+    ]);
+    draw(m,null);
+    return;
+  }
+
+  // macierz układu A·R = b,  b = -(wkład obciążeń)
+  const lc = loadContrib(m.loads);
+  const A = [0,1,2].map(eq => unknowns.map(u => coeff(u, m.supports, eq)));
+  const b = [ -lc.Fx, -lc.Fy, -lc.M ];
+  const sol = solve3(A, b);
+  if(!sol){
+    showErr("Układ geometrycznie niestabilny", [
+      "Równania równowagi są <b>osobliwe</b> (wyznacznik = 0) — przy tym rozmieszczeniu podpór reakcji nie da się jednoznacznie wyznaczyć.",
+      "Typowy powód: brak więzu poziomego mimo sił poziomych, albo podpory nie blokują obrotu/przesuwu belki."
+    ]);
+    draw(m,null);
+    return;
+  }
+
+  // przypisz wartości do niewiadomych
+  unknowns.forEach((u,i)=> u.val = sol[i]);
+  lastReactions = unknowns;
+
+  renderResults(m, unknowns, lc);
+  draw(m, unknowns);
+}
+
+function showErr(title, lines){
+  $("out").innerHTML = '<div class="err"><b>'+title+'.</b><ul style="margin:6px 0 0;padding-left:20px">'+
+    lines.map(l=>'<li>'+l+'</li>').join('')+'</ul></div>';
+}
+
+/* ====================== WYŚWIETLANIE RÓWNAŃ I WYNIKÓW ====================== */
+function renderResults(m, unknowns, lc){
+  // etykiety reakcji wg podpory
+  const supLabel = i => letter(i);
+  const reactName = u => u.comp + "<sub>" + supLabel(u.sup) + "</sub>";
+
+  // --- równania symboliczne z podstawionymi obciążeniami ---
+  const eqBox = document.createElement("div");
+  eqBox.className = "formula";
+  let html = '<span class="step">// Równania równowagi (momenty liczone względem początku belki, x = 0)</span>';
+
+  // ΣFx
+  const fxTerms = [];
+  unknowns.filter(u=>u.comp==="H").forEach(u=> fxTerms.push("H<sub>"+supLabel(u.sup)+"</sub>"));
+  lc.resolved.filter(r=>r.type==="P" && Math.abs(r.Px)>1e-12).forEach(r=> fxTerms.push("("+fmt(r.Px)+")"));
+  html += '<span class="fl gap"><b>ΣF<sub>x</sub> = 0:</b> '+(fxTerms.length?fxTerms.join(" + "):"0")+' = 0</span>';
+
+  // ΣFy
+  const fyTerms = [];
+  unknowns.filter(u=>u.comp==="V").forEach(u=> fyTerms.push("V<sub>"+supLabel(u.sup)+"</sub>"));
+  lc.resolved.forEach(r=>{
+    if(r.type==="P" && Math.abs(r.Py)>1e-12) fyTerms.push("("+fmt(r.Py)+")");
+    if(r.type==="q") fyTerms.push("("+fmt(r.R)+")");
+  });
+  html += '<span class="fl gap"><b>ΣF<sub>y</sub> = 0:</b> '+(fyTerms.length?fyTerms.join(" + "):"0")+' = 0</span>';
+
+  // ΣM o x=0
+  const mTerms = [];
+  unknowns.forEach(u=>{
+    if(u.comp==="V"){ const xs=m.supports[u.sup].x; mTerms.push(fmt(xs)+"·V<sub>"+supLabel(u.sup)+"</sub>"); }
+    if(u.comp==="M"){ mTerms.push("M<sub>"+supLabel(u.sup)+"</sub>"); }
+  });
+  lc.resolved.forEach(r=>{
+    if(r.type==="P" && Math.abs(r.Py)>1e-12) mTerms.push(fmt(r.x)+"·("+fmt(r.Py)+")");
+    if(r.type==="q") mTerms.push(fmt(r.xc)+"·("+fmt(r.R)+")");
+    if(r.type==="M") mTerms.push("("+fmt(r.M)+")");
+  });
+  html += '<span class="fl gap"><b>ΣM<sub>(x=0)</sub> = 0:</b> '+(mTerms.length?mTerms.join(" + "):"0")+' = 0</span>';
+
+  // informacja o sprowadzeniu q
+  const qs = lc.resolved.filter(r=>r.type==="q");
+  if(qs.length){
+    html += '<span class="fl gap step">// Obciążenie ciągłe sprowadzono do wypadkowej R = q·(x₂−x₁) w środku odcinka:</span>';
+    qs.forEach(r=>{
+      html += '<span class="fl">R = '+fmt(r.w)+'·('+fmt(r.x2)+' − '+fmt(r.x1)+') = <b>'+fmt(r.R)+'</b> kN  w  x = '+fmt(r.xc)+' m</span>';
+    });
+  }
+  eqBox.innerHTML = html;
+  $("out").appendChild(eqBox);
+
+  // --- wyniki: reakcje pogrupowane wg podpory ---
+  const card = document.createElement("div");
+  card.className = "result-const";
+  card.innerHTML = '<div class="ttl">REAKCJE PODPOROWE</div>';
+  m.supports.forEach((s,i)=>{
+    const us = unknowns.filter(u=>u.sup===i);
+    if(!us.length) return;
+    const typeName = SUP_TYPES.find(t=>t.v===s.type).t.split(" (")[0];
+    const parts = us.map(u=>{
+      const unit = u.comp==="M" ? "kN·m" : "kN";
+      const dir = u.comp==="M"
+        ? (u.val>=0 ? "CCW" : "CW")
+        : (u.comp==="V" ? (u.val>=0?"↑":"↓") : (u.val>=0?"→":"←"));
+      return u.comp+"<sub>"+letter(i)+"</sub> = <b>"+fmt(u.val)+"</b> "+unit+" &nbsp;<span class='sub'>"+dir+"</span>";
+    });
+    card.innerHTML += '<div class="c">Podpora '+letter(i)+' (x='+fmt(s.x)+' m, '+typeName+'):<br>'+parts.join("<br>")+'</div>';
+  });
+  $("out").appendChild(card);
+
+  // --- kontrola: residua równań po podstawieniu ---
+  let rFx=lc.Fx, rFy=lc.Fy, rM=lc.M;
+  unknowns.forEach(u=>{
+    rFx += coeff(u,m.supports,0)*u.val;
+    rFy += coeff(u,m.supports,1)*u.val;
+    rM  += coeff(u,m.supports,2)*u.val;
+  });
+  const z = v => Math.abs(v)<1e-6?0:v;
+  const chk = document.createElement("div");
+  chk.className = "ok-check";
+  chk.innerHTML = "✓ Kontrola równowagi (po podstawieniu): ΣF<sub>x</sub> = "+fmt(z(rFx))+
+    " kN, ΣF<sub>y</sub> = "+fmt(z(rFy))+" kN, ΣM = "+fmt(z(rM))+" kN·m.";
+  $("out").appendChild(chk);
+
+  // dane do nagłówka wydruku
+  $("print_data").textContent =
+    "L = "+fmt(m.L)+" m · podpory: "+m.supports.map((s,i)=>letter(i)+"@"+fmt(s.x)).join(", ")+
+    " · obciążeń: "+m.loads.length;
+}
+
+/* ====================== RYSUNEK SVG ====================== */
+let lastReactions = null;
+
+function el(name, attrs){
+  const e = document.createElementNS(SVGNS, name);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function txt(x,y,s,attrs){
+  const e = el("text", Object.assign({x,y}, attrs||{}));
+  e.textContent = s;
+  return e;
+}
+function arrow(svg, x1,y1,x2,y2,color,w){
+  w = w||2;
+  svg.appendChild(el("line",{x1,y1,x2,y2,stroke:color,"stroke-width":w}));
+  const ang = Math.atan2(y2-y1, x2-x1);
+  const h = 8;
+  const ax = x2 - h*Math.cos(ang-0.4), ay = y2 - h*Math.sin(ang-0.4);
+  const bx = x2 - h*Math.cos(ang+0.4), by = y2 - h*Math.sin(ang+0.4);
+  svg.appendChild(el("polygon",{points:`${x2},${y2} ${ax},${ay} ${bx},${by}`, fill:color}));
+}
+
+function liveDraw(){ draw(readModel(), null); }
+
+function draw(m, reactions){
+  const svg = $("scheme");
+  svg.innerHTML = "";
+  const W=760, H=260, mL=60, mR=60, yb=140;
+  const L = (isFinite(m.L) && m.L>0) ? m.L : 1;
+  const X = x => mL + (W-mL-mR) * (x / L);
+
+  // belka
+  svg.appendChild(el("line",{x1:X(0),y1:yb,x2:X(L),y2:yb,stroke:"#16243a","stroke-width":4}));
+  // wymiar długości
+  svg.appendChild(el("line",{x1:X(0),y1:yb+54,x2:X(L),y2:yb+54,stroke:"#9aa7b6","stroke-width":1}));
+  svg.appendChild(txt((X(0)+X(L))/2, yb+50, "L = "+fmt(m.L)+" m", {fill:"#5a6b80","font-size":12,"text-anchor":"middle","font-family":"ui-monospace,monospace"}));
+
+  // podpory
+  (m.supports||[]).forEach((s,i)=>{
+    if(!isFinite(s.x)) return;
+    const x = X(s.x);
+    drawSupport(svg, x, yb, s.type);
+    svg.appendChild(txt(x, yb+30, letter(i), {fill:"#1f3a93","font-size":13,"text-anchor":"middle","font-weight":"bold","font-family":"ui-monospace,monospace"}));
+  });
+
+  // obciążenia
+  (m.loads||[]).forEach(l=>{
+    if(l.kind==="P") drawPoint(svg, X, yb, l);
+    else if(l.kind==="q") drawUDL(svg, X, yb, l);
+    else drawMoment(svg, X, yb, l.x, l.M, "#b6312a", "M="+fmt(l.M));
+  });
+
+  // reakcje (po obliczeniu)
+  if(reactions){
+    reactions.forEach(u=>{
+      const s = m.supports[u.sup];
+      const x = X(s.x);
+      if(u.comp==="V"){
+        const up = u.val>=0;
+        const len = 42;
+        // strzałka reakcji pod belką, skierowana zgodnie ze znakiem
+        if(up) arrow(svg, x, yb+len+8, x, yb+8, "#27632a", 2.5);
+        else   arrow(svg, x, yb+8, x, yb+len+8, "#27632a", 2.5);
+        svg.appendChild(txt(x-7, yb+44, "V"+letter(u.sup)+"="+fmt(u.val), {fill:"#27632a","font-size":11,"text-anchor":"end","font-family":"ui-monospace,monospace"}));
+      } else if(u.comp==="H"){
+        const right = u.val>=0;
+        const len=42;
+        if(right) arrow(svg, x-len, yb, x, yb, "#1f3a93", 2.5);
+        else      arrow(svg, x+len, yb, x, yb, "#1f3a93", 2.5);
+        svg.appendChild(txt(x, yb-8, "H"+letter(u.sup)+"="+fmt(u.val), {fill:"#1f3a93","font-size":11,"text-anchor":"middle","font-family":"ui-monospace,monospace"}));
+      } else { // moment reakcyjny
+        drawMoment(svg, X, yb, s.x, u.val, "#1f3a93", "", true);
+        svg.appendChild(txt(x+26, yb-30, "M"+letter(u.sup)+"="+fmt(u.val), {fill:"#1f3a93","font-size":11,"text-anchor":"start","font-family":"ui-monospace,monospace"}));
+      }
+    });
+  }
+}
+
+function drawSupport(svg, x, yb, type){
+  const c = "#16243a";
+  if(type==="roller"){
+    svg.appendChild(el("polygon",{points:`${x},${yb} ${x-12},${yb+18} ${x+12},${yb+18}`, fill:"none", stroke:c,"stroke-width":2}));
+    svg.appendChild(el("circle",{cx:x-6,cy:yb+22,r:3,fill:"none",stroke:c,"stroke-width":1.5}));
+    svg.appendChild(el("circle",{cx:x+6,cy:yb+22,r:3,fill:"none",stroke:c,"stroke-width":1.5}));
+    svg.appendChild(el("line",{x1:x-14,y1:yb+27,x2:x+14,y2:yb+27,stroke:c,"stroke-width":1.5}));
+  } else if(type==="pin"){
+    svg.appendChild(el("polygon",{points:`${x},${yb} ${x-12},${yb+18} ${x+12},${yb+18}`, fill:"none", stroke:c,"stroke-width":2}));
+    svg.appendChild(el("line",{x1:x-14,y1:yb+18,x2:x+14,y2:yb+18,stroke:c,"stroke-width":1.5}));
+    for(let k=-12;k<=10;k+=5) svg.appendChild(el("line",{x1:x+k,y1:yb+18,x2:x+k-5,y2:yb+25,stroke:c,"stroke-width":1}));
+  } else { // fixed — ścianka z kreskowaniem (po stronie najbliższej krawędzi)
+    svg.appendChild(el("line",{x1:x,y1:yb-26,x2:x,y2:yb+26,stroke:c,"stroke-width":3}));
+    for(let k=-24;k<=22;k+=7) svg.appendChild(el("line",{x1:x,y1:yb+k,x2:x-9,y2:yb+k+7,stroke:c,"stroke-width":1}));
+  }
+}
+
+function drawPoint(svg, X, yb, l){
+  const x = X(l.x);
+  // składowa pionowa
+  if(Math.abs(l.Py)>1e-12){
+    const down = l.Py<0;
+    if(down) arrow(svg, x, yb-50, x, yb-3, "#b6312a", 2.5);
+    else     arrow(svg, x, yb-3, x, yb-50, "#b6312a", 2.5);
+    svg.appendChild(txt(x+6, yb-52, "P="+fmt(Math.abs(l.Py))+" kN", {fill:"#b6312a","font-size":11,"text-anchor":"start","font-family":"ui-monospace,monospace"}));
+  }
+  // składowa pozioma
+  if(Math.abs(l.Px)>1e-12){
+    const right = l.Px>0;
+    if(right) arrow(svg, x-44, yb, x-4, yb, "#b6312a", 2.5);
+    else      arrow(svg, x+44, yb, x+4, yb, "#b6312a", 2.5);
+    svg.appendChild(txt(x, yb+ (Math.abs(l.Py)>1e-12? -2 : -8), "", {}));
+  }
+}
+
+function drawUDL(svg, X, yb, l){
+  const x1 = X(l.x1), x2 = X(l.x2);
+  const down = l.w<0;
+  const top = yb-34;
+  svg.appendChild(el("line",{x1,y1:top,x2,y2:top,stroke:"#b6312a","stroke-width":2}));
+  const n = Math.max(2, Math.min(9, Math.round((x2-x1)/26)));
+  for(let i=0;i<=n;i++){
+    const xx = x1 + (x2-x1)*i/n;
+    if(down) arrow(svg, xx, top, xx, yb-3, "#b6312a", 1.5);
+    else     arrow(svg, xx, yb-3, xx, top, "#b6312a", 1.5);
+  }
+  svg.appendChild(txt((x1+x2)/2, top-6, "q="+fmt(Math.abs(l.w))+" kN/m", {fill:"#b6312a","font-size":11,"text-anchor":"middle","font-family":"ui-monospace,monospace"}));
+}
+
+function drawMoment(svg, X, yb, x, val, color, label, isReaction){
+  const cx = X(x), cy = yb, r = 18;
+  const ccw = val>=0;
+  // łuk
+  const a0 = ccw ? -0.4 : Math.PI+0.4;
+  const a1 = ccw ? Math.PI+0.9 : -0.9;
+  const p0x = cx + r*Math.cos(a0), p0y = cy + r*Math.sin(a0);
+  const p1x = cx + r*Math.cos(a1), p1y = cy + r*Math.sin(a1);
+  const large = 1, sweep = ccw?0:1;
+  svg.appendChild(el("path",{d:`M ${p0x} ${p0y} A ${r} ${r} 0 ${large} ${sweep} ${p1x} ${p1y}`, fill:"none", stroke:color,"stroke-width":2}));
+  // grot na końcu łuku (styczny do okręgu)
+  const tang = ccw ? a1 - Math.PI/2 : a1 + Math.PI/2;
+  svg.appendChild(el("polygon",{points:`${p1x},${p1y} ${p1x+7*Math.cos(tang-0.3)},${p1y+7*Math.sin(tang-0.3)} ${p1x+7*Math.cos(tang+0.3)},${p1y+7*Math.sin(tang+0.3)}`, fill:color}));
+  if(!isReaction) svg.appendChild(txt(cx, cy-r-6, label, {fill:color,"font-size":11,"text-anchor":"middle","font-family":"ui-monospace,monospace"}));
+}
+
+/* ====================== PRZYKŁADY ====================== */
+const EXAMPLES = [
+  { label:"Przykład 1 — wolnopodparta L=6, P=10 kN ↓ w x=3",
+    m:{L:6, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], loads:[{kind:"P",x:3,Py:-10,Px:0}]} },
+  { label:"Przykład 2 — wolnopodparta L=6, q=5 kN/m ↓ na [0,6]",
+    m:{L:6, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], loads:[{kind:"q",x1:0,x2:6,w:-5}]} },
+  { label:"Przykład 3 — wolnopodparta L=8, P=12 kN ↓ w x=2",
+    m:{L:8, supports:[{x:0,type:"pin"},{x:8,type:"roller"}], loads:[{kind:"P",x:2,Py:-12,Px:0}]} },
+  { label:"Przykład 4 — wspornik L=4, utwierdzenie w x=0, P=8 kN ↓ w x=4",
+    m:{L:4, supports:[{x:0,type:"fixed"}], loads:[{kind:"P",x:4,Py:-8,Px:0}]} },
+  { label:"Przykład 5 — przewieszenie L=8, podpory 0 i 6, q=4 kN/m ↓ na [0,8]",
+    m:{L:8, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], loads:[{kind:"q",x1:0,x2:8,w:-4}]} },
+  { label:"Przykład 6 — wolnopodparta L=6, moment M=15 kN·m w x=3",
+    m:{L:6, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], loads:[{kind:"M",x:3,M:15}]} },
+];
+
+function fillExamples(){
+  $("exampleList").innerHTML = EXAMPLES.map((e,i)=>'<option value="'+i+'">'+e.label+'</option>').join('');
+}
+function loadExample(i){
+  const e = EXAMPLES[i]; if(!e) return;
+  $("exampleList").value = String(i);
+  setModel(JSON.parse(JSON.stringify(e.m)));
+  compute();
+}
+
+/* ====================== START ====================== */
+fillExamples();
+$("addSupport").addEventListener("click", ()=>{ $("supports").appendChild(supportRow()); liveDraw(); });
+$("addLoad").addEventListener("click", ()=>{ $("loads").appendChild(loadRow()); liveDraw(); });
+$("go").addEventListener("click", compute);
+$("loadExample").addEventListener("click", ()=> loadExample(parseInt($("exampleList").value,10)||0));
+$("L").addEventListener("input", liveDraw);
+
+// nie pusty start — wczytaj Przykład 1
+loadExample(0);
+</script>
+</body>
+</html>

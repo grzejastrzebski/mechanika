@@ -152,7 +152,7 @@
       <legend>Obciążenia</legend>
       <div id="loads"></div>
       <button class="btns addbtn" id="addLoad">+ dodaj obciążenie</button>
-      <div class="note">Konwencja znaków: siła pionowa w górę „+", w dół „−"; siła pozioma w prawo „+"; moment przeciwnie do ruchu wskazówek (CCW) „+".</div>
+      <div class="note">Konwencja znaków: siła pionowa w górę „+", w dół „−"; siła pozioma w prawo „+"; moment przeciwnie do ruchu wskazówek (CCW) „+". Siłę skupioną można podać jako składowe P<sub>x</sub>/P<sub>y</sub> albo jako wartość P + kąt α (wtedy P<sub>x</sub>=P·cos α, P<sub>y</sub>=P·sin α).</div>
     </fieldset>
 
     <button class="btn" id="go">Oblicz reakcje</button>
@@ -216,11 +216,21 @@ const LOAD_KINDS = [
 
 function loadFields(kind, l){
   if(kind==="P"){
-    return '<div class="grow g3">'+
-      '<div><label>Pozycja x [m]</label><input class="lx" type="number" step="any" value="'+(l.x??0)+'"></div>'+
-      '<div><label>Pionowa P_y [kN] (↑+ ↓−)</label><input class="lpy" type="number" step="any" value="'+(l.Py??0)+'"></div>'+
-      '<div><label>Pozioma P_x [kN] (→+)</label><input class="lpx" type="number" step="any" value="'+(l.Px??0)+'"></div>'+
-    '</div>';
+    const mode = l.mode || ((l.P!=null && l.ang!=null) ? "polar" : "comp");
+    const optC = '<option value="comp"'+(mode==="comp"?" selected":"")+'>składowe P_x, P_y</option>';
+    const optP = '<option value="polar"'+(mode==="polar"?" selected":"")+'>wartość P + kąt α</option>';
+    let h = '<label>Sposób zadania siły</label><select class="pmode">'+optC+optP+'</select>'+
+      '<div class="grow g3" style="margin-top:6px">'+
+      '<div><label>Pozycja x [m]</label><input class="lx" type="number" step="any" value="'+(l.x??0)+'"></div>';
+    if(mode==="polar"){
+      h += '<div><label>Wartość P [kN]</label><input class="lP" type="number" step="any" value="'+(l.P??0)+'"></div>'+
+           '<div><label>Kąt α [°] (od poziomu, CCW+)</label><input class="lang" type="number" step="any" value="'+(l.ang??0)+'"></div></div>'+
+           '<div class="note" style="margin-top:4px">P_x = P·cos α, &nbsp; P_y = P·sin α &nbsp;(α od osi poziomej, przeciwnie do wskazówek). Np. siła pionowo w dół: α = −90°; w prawo: α = 0°.</div>';
+    } else {
+      h += '<div><label>Pionowa P_y [kN] (↑+ ↓−)</label><input class="lpy" type="number" step="any" value="'+(l.Py??0)+'"></div>'+
+           '<div><label>Pozioma P_x [kN] (→+)</label><input class="lpx" type="number" step="any" value="'+(l.Px??0)+'"></div></div>';
+    }
+    return h;
   }
   if(kind==="q"){
     return '<div class="grow g3">'+
@@ -252,14 +262,22 @@ function loadRow(l){
   const sel = el.querySelector(".lk");
   sel.value = l.kind;
   const fields = el.querySelector(".fields");
-  fields.innerHTML = loadFields(l.kind, l);
-  sel.addEventListener("change", ()=>{
-    fields.innerHTML = loadFields(sel.value, {});
-    liveDraw();
-  });
+  renderLoadFields(fields, l.kind, l);
+  sel.addEventListener("change", ()=>{ renderLoadFields(fields, sel.value, {}); liveDraw(); });
   el.querySelector(".del").addEventListener("click", ()=>{ el.remove(); liveDraw(); });
   el.addEventListener("input", liveDraw);
   return el;
+}
+
+// renderuje pola obciążenia i podpina przełącznik składowe/kąt dla siły P
+function renderLoadFields(fields, kind, l){
+  fields.innerHTML = loadFields(kind, l);
+  const pm = fields.querySelector(".pmode");
+  if(pm) pm.addEventListener("change", ()=>{
+    const xEl = fields.querySelector(".lx");
+    renderLoadFields(fields, "P", {mode:pm.value, x: xEl ? parseFloat(xEl.value)||0 : 0});
+    liveDraw();
+  });
 }
 
 function readModel(){
@@ -270,7 +288,16 @@ function readModel(){
   }));
   const loads = [...$("loads").children].map(el=>{
     const kind = el.querySelector(".lk").value;
-    if(kind==="P") return {kind, x:num(el,".lx"), Py:num(el,".lpy"), Px:num(el,".lpx")};
+    if(kind==="P"){
+      const x = num(el,".lx");
+      const pm = el.querySelector(".pmode");
+      const mode = pm ? pm.value : "comp";
+      if(mode==="polar"){
+        const P = num(el,".lP"), ang = num(el,".lang"), rad = ang*Math.PI/180;
+        return {kind, mode:"polar", x, P, ang, Px:P*Math.cos(rad), Py:P*Math.sin(rad)};
+      }
+      return {kind, mode:"comp", x, Py:num(el,".lpy"), Px:num(el,".lpx")};
+    }
     if(kind==="q") return {kind, x1:num(el,".lx1"), x2:num(el,".lx2"), w:num(el,".lw")};
     return {kind:"M", x:num(el,".lx"), M:num(el,".lm")};
   });
@@ -306,7 +333,7 @@ function loadContrib(loads){
   loads.forEach(l=>{
     if(l.kind==="P"){
       Fx += l.Px; Fy += l.Py; M += l.x*l.Py; // siła pozioma na osi y=0 nie daje momentu
-      resolved.push({type:"P", Px:l.Px, Py:l.Py, x:l.x});
+      resolved.push({type:"P", Px:l.Px, Py:l.Py, x:l.x, polar:l.mode==="polar", P:l.P, ang:l.ang});
     } else if(l.kind==="q"){
       const R = l.w*(l.x2 - l.x1);     // wypadkowa (pionowa, w górę +)
       const xc = (l.x1 + l.x2)/2;
@@ -420,14 +447,15 @@ function renderResults(m, unknowns, lc){
   // ΣFx
   const fxTerms = [];
   unknowns.filter(u=>u.comp==="H").forEach(u=> fxTerms.push("H<sub>"+supLabel(u.sup)+"</sub>"));
-  lc.resolved.filter(r=>r.type==="P" && Math.abs(r.Px)>1e-12).forEach(r=> fxTerms.push("("+fmt(r.Px)+")"));
+  lc.resolved.filter(r=>r.type==="P" && Math.abs(r.Px)>1e-12).forEach(r=>
+    fxTerms.push(r.polar ? "("+fmt(r.P)+"·cos "+fmt(r.ang)+"° = "+fmt(r.Px)+")" : "("+fmt(r.Px)+")"));
   html += '<span class="fl gap"><b>ΣF<sub>x</sub> = 0:</b> '+(fxTerms.length?fxTerms.join(" + "):"0")+' = 0</span>';
 
   // ΣFy
   const fyTerms = [];
   unknowns.filter(u=>u.comp==="V").forEach(u=> fyTerms.push("V<sub>"+supLabel(u.sup)+"</sub>"));
   lc.resolved.forEach(r=>{
-    if(r.type==="P" && Math.abs(r.Py)>1e-12) fyTerms.push("("+fmt(r.Py)+")");
+    if(r.type==="P" && Math.abs(r.Py)>1e-12) fyTerms.push(r.polar ? "("+fmt(r.P)+"·sin "+fmt(r.ang)+"° = "+fmt(r.Py)+")" : "("+fmt(r.Py)+")");
     if(r.type==="q") fyTerms.push("("+fmt(r.R)+")");
   });
   html += '<span class="fl gap"><b>ΣF<sub>y</sub> = 0:</b> '+(fyTerms.length?fyTerms.join(" + "):"0")+' = 0</span>';
@@ -439,11 +467,20 @@ function renderResults(m, unknowns, lc){
     if(u.comp==="M"){ mTerms.push("M<sub>"+supLabel(u.sup)+"</sub>"); }
   });
   lc.resolved.forEach(r=>{
-    if(r.type==="P" && Math.abs(r.Py)>1e-12) mTerms.push(fmt(r.x)+"·("+fmt(r.Py)+")");
+    if(r.type==="P" && Math.abs(r.Py)>1e-12) mTerms.push(r.polar ? fmt(r.x)+"·("+fmt(r.P)+"·sin "+fmt(r.ang)+"°)" : fmt(r.x)+"·("+fmt(r.Py)+")");
     if(r.type==="q") mTerms.push(fmt(r.xc)+"·("+fmt(r.R)+")");
     if(r.type==="M") mTerms.push("("+fmt(r.M)+")");
   });
   html += '<span class="fl gap"><b>ΣM<sub>(x=0)</sub> = 0:</b> '+(mTerms.length?mTerms.join(" + "):"0")+' = 0</span>';
+
+  // informacja o rozkładzie sił ukośnych na składowe
+  const ps = lc.resolved.filter(r=>r.type==="P" && r.polar);
+  if(ps.length){
+    html += '<span class="fl gap step">// Siły zadane pod kątem rozłożono na składowe: P_x = P·cos α, P_y = P·sin α</span>';
+    ps.forEach(r=>{
+      html += '<span class="fl">P = '+fmt(r.P)+' kN, α = '+fmt(r.ang)+'°  →  P_x = '+fmt(r.P)+'·cos '+fmt(r.ang)+'° = <b>'+fmt(r.Px)+'</b> kN,  P_y = '+fmt(r.P)+'·sin '+fmt(r.ang)+'° = <b>'+fmt(r.Py)+'</b> kN</span>';
+    });
+  }
 
   // informacja o sprowadzeniu q
   const qs = lc.resolved.filter(r=>r.type==="q");
@@ -593,20 +630,17 @@ function drawSupport(svg, x, yb, type){
 
 function drawPoint(svg, X, yb, l){
   const x = X(l.x);
-  // składowa pionowa
-  if(Math.abs(l.Py)>1e-12){
-    const down = l.Py<0;
-    if(down) arrow(svg, x, yb-50, x, yb-3, "#b6312a", 2.5);
-    else     arrow(svg, x, yb-3, x, yb-50, "#b6312a", 2.5);
-    svg.appendChild(txt(x+6, yb-52, "P="+fmt(Math.abs(l.Py))+" kN", {fill:"#b6312a","font-size":11,"text-anchor":"start","font-family":"ui-monospace,monospace"}));
-  }
-  // składowa pozioma
-  if(Math.abs(l.Px)>1e-12){
-    const right = l.Px>0;
-    if(right) arrow(svg, x-44, yb, x-4, yb, "#b6312a", 2.5);
-    else      arrow(svg, x+44, yb, x+4, yb, "#b6312a", 2.5);
-    svg.appendChild(txt(x, yb+ (Math.abs(l.Py)>1e-12? -2 : -8), "", {}));
-  }
+  const Px = l.Px||0, Py = l.Py||0;
+  const mag = Math.hypot(Px, Py);
+  if(mag < 1e-12) return;
+  const len = 50;
+  // kierunek siły na ekranie (oś y ekranu skierowana w dół → odwracamy Py)
+  const ux = Px/mag, uy = -Py/mag;
+  const tailx = x - ux*len, taily = yb - uy*len; // grot przy belce, ogon „od tyłu"
+  arrow(svg, tailx, taily, x, yb, "#b6312a", 2.5);
+  const lbl = "P="+fmt(mag)+" kN" + (l.mode==="polar" ? " (α="+fmt(l.ang)+"°)" : "");
+  const anchor = ux>=0 ? "start" : "end";
+  svg.appendChild(txt(tailx + (ux>=0?4:-4), taily - 4, lbl, {fill:"#b6312a","font-size":11,"text-anchor":anchor,"font-family":"ui-monospace,monospace"}));
 }
 
 function drawUDL(svg, X, yb, l){
@@ -653,6 +687,8 @@ const EXAMPLES = [
     m:{L:8, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], loads:[{kind:"q",x1:0,x2:8,w:-4}]} },
   { label:"Przykład 6 — wolnopodparta L=6, moment M=15 kN·m w x=3",
     m:{L:6, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], loads:[{kind:"M",x:3,M:15}]} },
+  { label:"Przykład 7 — siła ukośna L=6, P=10 kN pod α=−60° w x=3",
+    m:{L:6, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], loads:[{kind:"P",mode:"polar",x:3,P:10,ang:-60}]} },
 ];
 
 function fillExamples(){

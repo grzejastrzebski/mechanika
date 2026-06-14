@@ -367,29 +367,33 @@ function rqGroup(lab){             // grupa jednostek dla trybu symbolicznego (R
 }
 /* równania w DOKŁADNEJ formie prowadzącego (D, ν symbolicznie); r podstawione liczbowo.
    Gdy q = 0 — człon obciążenia pomijamy (na pewno 0). */
-function exprW(L,r,q,hl){
-  let s=L[0]+' + '+L[1]+'·'+r+'²';
-  if(hl) s+=' + '+L[2]+'·ln'+r+' + '+L[3]+'·'+r+'²·ln'+r;
-  if(Math.abs(q)>1e-9) s+=' + ('+q+'·'+r+'⁴)/(64·D)';
+function exprW(L,r,q,hl,sym){
+  const rt=sym?'('+sf(r)+'R)':r, qt=sym?(sf(q)+'q'):q;
+  let s=L[0]+' + '+L[1]+'·'+rt+'²';
+  if(hl) s+=' + '+L[2]+'·ln'+rt+' + '+L[3]+'·'+rt+'²·ln'+rt;
+  if(Math.abs(q)>1e-9) s+=' + ('+qt+'·'+rt+'⁴)/(64·D)';
   return s;
 }
-function exprPhi(L,r,q,hl){
-  let s = hl ? (L[2]+'/'+r+' + 2·'+L[1]+'·'+r+' + '+L[3]+'·'+r+' + 2·'+L[3]+'·'+r+'·ln'+r)
-             : ('2·'+L[1]+'·'+r);
-  if(Math.abs(q)>1e-9) s+=' + ('+q+'·'+r+'³)/(16·D)';
+function exprPhi(L,r,q,hl,sym){
+  const rt=sym?'('+sf(r)+'R)':r, qt=sym?(sf(q)+'q'):q;
+  let s = hl ? (L[2]+'/'+rt+' + 2·'+L[1]+'·'+rt+' + '+L[3]+'·'+rt+' + 2·'+L[3]+'·'+rt+'·ln'+rt)
+             : ('2·'+L[1]+'·'+rt);
+  if(Math.abs(q)>1e-9) s+=' + ('+qt+'·'+rt+'³)/(16·D)';
   return s;
 }
-function exprQ(L,r,q,hl){
-  const ql = Math.abs(q)>1e-9 ? ('('+q+'·'+r+')/2') : '';
-  if(hl) return '−(4·'+L[3]+'·D)/'+r + (ql?(' − '+ql):'');
+function exprQ(L,r,q,hl,sym){
+  const rt=sym?'('+sf(r)+'R)':r, qt=sym?(sf(q)+'q'):q;
+  const ql = Math.abs(q)>1e-9 ? ('('+qt+'·'+rt+')/2') : '';
+  if(hl) return '−(4·'+L[3]+'·D)/'+rt + (ql?(' − '+ql):'');
   return ql ? ('−'+ql) : '0';
 }
-function exprMr(L,r,q,hl){
+function exprMr(L,r,q,hl,sym){
+  const rt=sym?'('+sf(r)+'R)':r, qt=sym?(sf(q)+'q'):q;
   const Q0=Math.abs(q)<1e-9;
-  if(hl) return '('+L[2]+'·D)/'+r+'² − 2·'+L[1]+'·D − 3·'+L[3]+'·D − 2·'+L[3]+'·D·ln'+r
-    +(Q0?'':' − (3·'+q+'·'+r+'²)/16')
-    +' − ν·(('+L[2]+'·D)/'+r+'² + 2·'+L[1]+'·D + '+L[3]+'·D + 2·'+L[3]+'·D·ln'+r+(Q0?'':' + ('+q+'·'+r+'²)/16')+')';
-  return '−2·'+L[1]+'·D'+(Q0?'':' − (3·'+q+'·'+r+'²)/16')+' − ν·(2·'+L[1]+'·D'+(Q0?'':' + ('+q+'·'+r+'²)/16')+')';
+  if(hl) return '('+L[2]+'·D)/'+rt+'² − 2·'+L[1]+'·D − 3·'+L[3]+'·D − 2·'+L[3]+'·D·ln'+rt
+    +(Q0?'':' − (3·'+qt+'·'+rt+'²)/16')
+    +' − ν·(('+L[2]+'·D)/'+rt+'² + 2·'+L[1]+'·D + '+L[3]+'·D + 2·'+L[3]+'·D·ln'+rt+(Q0?'':' + ('+qt+'·'+rt+'²)/16')+')';
+  return '−2·'+L[1]+'·D'+(Q0?'':' − (3·'+qt+'·'+rt+'²)/16')+' − ν·(2·'+L[1]+'·D'+(Q0?'':' + ('+qt+'·'+rt+'²)/16')+')';
 }
 function exprMth(L,r,q,hl){
   const Q0=Math.abs(q)<1e-9;
@@ -511,11 +515,13 @@ function buildScheme(s){
   return defs+g;
 }
 function buildBC(s){
-  function qn(b,sub,r){return b+sub+'('+sf(r)+')';}
-  function plusP(P){if(!P||Math.abs(P)<1e-9)return '';return P>0?' + '+sf(P):' − '+sf(-P);}
-  function minusM(M){if(!M||Math.abs(M)<1e-9)return '';return M>0?' − '+sf(M):' + '+sf(-M);}
+  const sym=s.sym;
+  function qn(b,sub,r){return b+sub+'('+sf(r)+(sym?'R':'')+')';}
+  function plusP(P){if(!P||Math.abs(P)<1e-9)return '';const u=sym?'·qR':'';return P>0?' + '+sf(P)+u:' − '+sf(-P)+u;}
+  function minusM(M){if(!M||Math.abs(M)<1e-9)return '';const u=sym?'·qR²':'';return M>0?' − '+sf(M)+u:' + '+sf(-M)+u;}
+  function valLab(v,qt){if(!v||Math.abs(v)<1e-9)return '0'; return sf(v)+(sym?('·'+(qt==='Q'?'qR':'qR²')):'');}
   const QN={w:'w',phi:'φ',Mr:'Mr',Q:'Q'};
-  function ex(qt,L,r,q,hl){return qt==='w'?exprW(L,r,q,hl):qt==='phi'?exprPhi(L,r,q,hl):qt==='Mr'?exprMr(L,r,q,hl):exprQ(L,r,q,hl);}
+  function ex(qt,L,r,q,hl){return qt==='w'?exprW(L,r,q,hl,sym):qt==='phi'?exprPhi(L,r,q,hl,sym):qt==='Mr'?exprMr(L,r,q,hl,sym):exprQ(L,r,q,hl,sym);}
   function two(qt,r,Lin,qin,hlin,Lout,qout,hlout){
     return '<span class="ln"><span class="q1">'+qn(QN[qt],'₁',r)+'</span> = '+ex(qt,Lin,r,qin,hlin)+'</span>'
           +'<span class="ln"><span class="q2">'+qn(QN[qt],'₂',r)+'</span> = '+ex(qt,Lout,r,qout,hlout)+'</span>';
@@ -526,29 +532,30 @@ function buildBC(s){
     else if(type==='pinned')cs=[{qt:'w',v:0},{qt:'Mr',v:M||0}];
     else if(type==='free')cs=[{qt:'Mr',v:M||0},{qt:'Q',v:P||0}];
     else cs=[{qt:'phi',v:0},{qt:'Q',v:P||0}];
-    return {h:title, items:cs.map(c=>({lbl:qn(QN[c.qt],sub,r)+' = '+sf(c.v), eq:'<span class="ln">'+ex(c.qt,L,r,q,hl)+' = '+sf(c.v)+'</span>'}))};
+    return {h:title, items:cs.map(c=>({lbl:qn(QN[c.qt],sub,r)+' = '+valLab(c.v,c.qt), eq:'<span class="ln">'+ex(c.qt,L,r,q,hl)+' = '+valLab(c.v,c.qt)+'</span>'}))};
   }
   const full={clamped:'utwierdzenie',pinned:'podpora przegubowa',free:'brzeg swobodny',guided:'utwierdzenie ślizgowe'};
   const Lin=['C₁','C₂'], Lout=['C₅','C₆','C₇','C₈'];
+  const ru=v=>sf(v)+(sym?'R':' m');
   let groups=[];
   if(s.mode==='solid'){
     const r=isFinite(s.R)&&s.R>0?s.R:5, q=isFinite(s.q1)?s.q1:0;
-    groups.push(edgeGroup('Brzeg r = '+sf(r)+' m — '+full[s.outerType], s.outerType, Lin, false, '₁', r, q, s.outerM, s.outerP));
+    groups.push(edgeGroup('Brzeg r = '+ru(r)+' — '+full[s.outerType], s.outerType, Lin, false, '₁', r, q, s.outerM, s.outerP));
   } else if(s.mode==='annulus'){
     const a=isFinite(s.a)&&s.a>0?s.a:2, b=isFinite(s.b)&&s.b>0?s.b:7, q=isFinite(s.q1)?s.q1:0;
-    groups.push(edgeGroup('Brzeg wewnętrzny r = '+sf(a)+' m — '+full[s.innerType], s.innerType, Lout, true, '₂', a, q, s.innerM, s.innerP));
-    groups.push(edgeGroup('Brzeg zewnętrzny r = '+sf(b)+' m — '+full[s.outerType], s.outerType, Lout, true, '₂', b, q, s.outerM, s.outerP));
+    groups.push(edgeGroup('Brzeg wewnętrzny r = '+ru(a)+' — '+full[s.innerType], s.innerType, Lout, true, '₂', a, q, s.innerM, s.innerP));
+    groups.push(edgeGroup('Brzeg zewnętrzny r = '+ru(b)+' — '+full[s.outerType], s.outerType, Lout, true, '₂', b, q, s.outerM, s.outerP));
   } else {
     const a=isFinite(s.a)&&s.a>0?s.a:2, b=isFinite(s.b)&&s.b>0?s.b:6, q1=isFinite(s.q1)?s.q1:0, q2=isFinite(s.q2)?s.q2:0;
     let items;
     if(s.ifaceType==='ring'){
       items=[
-        {lbl:qn('w','₁',a)+' = 0', eq:'<span class="ln">'+exprW(Lin,a,q1,false)+' = 0</span>'},
-        {lbl:qn('w','₂',a)+' = 0', eq:'<span class="ln">'+exprW(Lout,a,q2,true)+' = 0</span>'},
+        {lbl:qn('w','₁',a)+' = 0', eq:'<span class="ln">'+exprW(Lin,a,q1,false,sym)+' = 0</span>'},
+        {lbl:qn('w','₂',a)+' = 0', eq:'<span class="ln">'+exprW(Lout,a,q2,true,sym)+' = 0</span>'},
         {lbl:qn('φ','₁',a)+' = '+qn('φ','₂',a), eq:two('phi',a,Lin,q1,false,Lout,q2,true)},
         {lbl:qn('Mr','₁',a)+' = '+qn('Mr','₂',a)+minusM(s.ifaceM), eq:two('Mr',a,Lin,q1,false,Lout,q2,true)}
       ];
-      groups.push({h:'Styk r = '+sf(a)+' m — podpora pierścieniowa', items});
+      groups.push({h:'Styk r = '+ru(a)+' — podpora pierścieniowa', items});
     } else {
       items=[
         {lbl:qn('w','₁',a)+' = '+qn('w','₂',a), eq:two('w',a,Lin,q1,false,Lout,q2,true)},
@@ -556,9 +563,9 @@ function buildBC(s){
         {lbl:qn('Q','₁',a)+' = '+qn('Q','₂',a)+plusP(s.ifaceP), eq:two('Q',a,Lin,q1,false,Lout,q2,true)},
         {lbl:qn('Mr','₁',a)+' = '+qn('Mr','₂',a)+minusM(s.ifaceM), eq:two('Mr',a,Lin,q1,false,Lout,q2,true)}
       ];
-      groups.push({h:'Styk r = '+sf(a)+' m — ciągłość', items});
+      groups.push({h:'Styk r = '+ru(a)+' — ciągłość', items});
     }
-    groups.push(edgeGroup('Brzeg zewnętrzny r = '+sf(b)+' m — '+full[s.outerType], s.outerType, Lout, true, '₂', b, q2, s.outerM, s.outerP));
+    groups.push(edgeGroup('Brzeg zewnętrzny r = '+ru(b)+' — '+full[s.outerType], s.outerType, Lout, true, '₂', b, q2, s.outerM, s.outerP));
   }
   let total=0,html='';
   groups.forEach(g=>{total+=g.items.length;

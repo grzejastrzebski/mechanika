@@ -871,7 +871,8 @@ function compute(){
       {lab:'Mθ'+sub,gen:genMth,B:BMth,cfs:cfMs,cfn:cfMn,hasD:false,T:mtT,rf:f},
       {lab:'Q'+sub,gen:genQ,B:BQ,cfs:cfMs,cfn:cfMn,hasD:false,T:qT,rf:f}
     ];
-    html+='<div class="bc-h" style="margin-top:12px">▸ '+(regions.length>1?('Obszar '+(ri+1)+' — '):'')+'r ∈ ('+reg.rStart+', '+reg.rEnd+')</div>';
+    const r0=v=>v<1e-9?'0':(SYM_RQ?v+'R':String(v));
+    html+='<div class="bc-h" style="margin-top:12px">▸ '+(regions.length>1?('Obszar '+(ri+1)+' — '):'')+'r ∈ ('+r0(reg.rStart)+', '+r0(reg.rEnd)+')</div>';
     quants.forEach(Q=>{
       let h='<div class="formula"><span class="fl"><b>'+Q.lab+'(r)</b></span><span class="fl"><span class="step">wzór ogólny:</span> '+Q.gen+'</span>';
       pts.forEach(rk=>{

@@ -184,42 +184,49 @@
     </div>
 
     <div class="row" style="margin-top:6px">
+      <div><label>Tryb danych</label>
+        <select id="InputMode"><option value="num">liczbowy (m, kN/m²)</option><option value="sym">symboliczny (R, q)</option></select>
+      </div>
       <div><label>Współczynnik Poissona ν</label><input id="nu" type="number" step="0.05" value="0.3"></div>
+    </div>
+    <div class="row" id="DmodeRow" style="margin-top:6px">
       <div><label>Sztywność płyty D</label>
         <select id="Dmode"><option value="sym">symboliczne (wyniki ÷D)</option><option value="num">wartość liczbowa</option></select>
       </div>
+      <div></div>
     </div>
     <div class="row hide" id="Drow" style="margin-top:6px">
       <div><label>D [kN·m]  (np. 300000 lub 3e5)</label><input id="Dval" type="text" value="300000" inputmode="decimal"></div>
       <div></div>
     </div>
-    <div class="note">Przy <b>D symbolicznym</b> ugięcie w i kąt φ wychodzą w postaci „liczba / D" (Q, M<sub>r</sub>, M<sub>θ</sub> nie zależą od D). Przy <b>D liczbowym</b> w [m] i φ [rad] są policzone wprost.</div>
+    <div class="note" id="DmodeNote">Przy <b>D symbolicznym</b> ugięcie w i kąt φ wychodzą w postaci „liczba / D" (Q, M<sub>r</sub>, M<sub>θ</sub> nie zależą od D). Przy <b>D liczbowym</b> w [m] i φ [rad] są policzone wprost.</div>
+    <div class="note hide" id="SymNote">Tryb <b>symboliczny (R, q)</b>: wymiary podaj jako wielokrotność R (np. „5" lub „5R" = 5R), obciążenia jako wielokrotność q (np. „8" lub „8q" = 8q) — momenty/siły brzegowe jako wielokrotność qR²/qR. Wyniki: w = (liczba)·qR⁴/D, φ = (liczba)·qR³/D (zawierają 1/D); M<sub>r</sub>, M<sub>θ</sub> = (liczba)·qR², Q = (liczba)·qR (nie zależą od D).</div>
 
     <!-- GEOMETRY -->
     <fieldset id="geo">
       <legend>Geometria i obciążenie</legend>
       <div id="g-solid">
         <div class="row">
-          <div><label>Promień R [m]</label><input id="R" type="number" step="0.5" value="5"></div>
-          <div><label>Obciążenie q [kN/m²]</label><input id="q1s" type="number" step="0.5" value="2"></div>
+          <div><label data-lbl-num="Promień R [m]" data-lbl-sym="Promień R — wielokrotność R (np. 5 lub 5R)">Promień R [m]</label><input id="R" type="text" inputmode="decimal" value="5"></div>
+          <div><label data-lbl-num="Obciążenie q [kN/m²]" data-lbl-sym="Obciążenie q — wielokrotność q (np. 8 lub 8q)">Obciążenie q [kN/m²]</label><input id="q1s" type="text" inputmode="decimal" value="2"></div>
         </div>
       </div>
       <div id="g-ann" class="hide">
         <div class="row3">
-          <div><label>a (wewn.) [m]</label><input id="a_ann" type="number" step="0.5" value="2"></div>
-          <div><label>b (zewn.) [m]</label><input id="b_ann" type="number" step="0.5" value="7"></div>
-          <div><label>q [kN/m²]</label><input id="q1a" type="number" step="0.5" value="4"></div>
+          <div><label data-lbl-num="a (wewn.) [m]" data-lbl-sym="a (wewn.) — wielokrotność R">a (wewn.) [m]</label><input id="a_ann" type="text" inputmode="decimal" value="2"></div>
+          <div><label data-lbl-num="b (zewn.) [m]" data-lbl-sym="b (zewn.) — wielokrotność R">b (zewn.) [m]</label><input id="b_ann" type="text" inputmode="decimal" value="7"></div>
+          <div><label data-lbl-num="q [kN/m²]" data-lbl-sym="q — wielokrotność q">q [kN/m²]</label><input id="q1a" type="text" inputmode="decimal" value="4"></div>
         </div>
       </div>
       <div id="g-two" class="hide">
         <div class="row3">
-          <div><label>a (styk) [m]</label><input id="a_two" type="number" step="0.5" value="2"></div>
-          <div><label>b (zewn.) [m]</label><input id="b_two" type="number" step="0.5" value="6"></div>
+          <div><label data-lbl-num="a (styk) [m]" data-lbl-sym="a (styk) — wielokrotność R">a (styk) [m]</label><input id="a_two" type="text" inputmode="decimal" value="2"></div>
+          <div><label data-lbl-num="b (zewn.) [m]" data-lbl-sym="b (zewn.) — wielokrotność R">b (zewn.) [m]</label><input id="b_two" type="text" inputmode="decimal" value="6"></div>
           <div><label>ν (wspólne)</label><input id="nu2disp" value="= ν" disabled></div>
         </div>
         <div class="row">
-          <div><label>q wewn. (0..a) [kN/m²]</label><input id="q1t" type="number" step="0.5" value="3"></div>
-          <div><label>q zewn. (a..b) [kN/m²]</label><input id="q2t" type="number" step="0.5" value="3"></div>
+          <div><label data-lbl-num="q wewn. (0..a) [kN/m²]" data-lbl-sym="q wewn. (0..a) — wielokrotność q">q wewn. (0..a) [kN/m²]</label><input id="q1t" type="text" inputmode="decimal" value="3"></div>
+          <div><label data-lbl-num="q zewn. (a..b) [kN/m²]" data-lbl-sym="q zewn. (a..b) — wielokrotność q">q zewn. (a..b) [kN/m²]</label><input id="q2t" type="text" inputmode="decimal" value="3"></div>
         </div>
       </div>
     </fieldset>
@@ -235,8 +242,8 @@
         <option value="guided">Utwierdzenie ślizgowe  → φ=0, Q=P</option>
       </select>
       <div class="row">
-        <div><label>Moment brzegowy M [kN·m/m]</label><input id="inner_M" type="number" step="0.5" value="0"></div>
-        <div><label>Siła brzegowa P [kN/m]</label><input id="inner_P" type="number" step="0.5" value="0"></div>
+        <div><label data-lbl-num="Moment brzegowy M [kN·m/m]" data-lbl-sym="Moment brzegowy M — wielokrotność qR²">Moment brzegowy M [kN·m/m]</label><input id="inner_M" type="number" step="0.5" value="0"></div>
+        <div><label data-lbl-num="Siła brzegowa P [kN/m]" data-lbl-sym="Siła brzegowa P — wielokrotność qR">Siła brzegowa P [kN/m]</label><input id="inner_P" type="number" step="0.5" value="0"></div>
       </div>
     </fieldset>
 
@@ -249,8 +256,8 @@
         <option value="ring">Podpora pierścieniowa  → w₁=0, w₂=0, φ₁=φ₂, Mr₁=Mr₂(−M)</option>
       </select>
       <div class="row">
-        <div><label>Moment w styku M [kN·m/m]</label><input id="iface_M" type="number" step="0.5" value="0"></div>
-        <div><label>Siła w styku P [kN/m]</label><input id="iface_P" type="number" step="0.5" value="0"></div>
+        <div><label data-lbl-num="Moment w styku M [kN·m/m]" data-lbl-sym="Moment w styku M — wielokrotność qR²">Moment w styku M [kN·m/m]</label><input id="iface_M" type="number" step="0.5" value="0"></div>
+        <div><label data-lbl-num="Siła w styku P [kN/m]" data-lbl-sym="Siła w styku P — wielokrotność qR">Siła w styku P [kN/m]</label><input id="iface_P" type="number" step="0.5" value="0"></div>
       </div>
     </fieldset>
 
@@ -265,8 +272,8 @@
         <option value="guided">Utwierdzenie ślizgowe  → φ=0, Q=P</option>
       </select>
       <div class="row">
-        <div><label>Moment brzegowy M [kN·m/m]</label><input id="outer_M" type="number" step="0.5" value="0"></div>
-        <div><label>Siła brzegowa P [kN/m]</label><input id="outer_P" type="number" step="0.5" value="0"></div>
+        <div><label data-lbl-num="Moment brzegowy M [kN·m/m]" data-lbl-sym="Moment brzegowy M — wielokrotność qR²">Moment brzegowy M [kN·m/m]</label><input id="outer_M" type="number" step="0.5" value="0"></div>
+        <div><label data-lbl-num="Siła brzegowa P [kN/m]" data-lbl-sym="Siła brzegowa P — wielokrotność qR">Siła brzegowa P [kN/m]</label><input id="outer_P" type="number" step="0.5" value="0"></div>
       </div>
     </fieldset>
 
@@ -351,6 +358,13 @@ function poly(terms){ let out='',first=true;
     if(first){out+=(neg?'−':'')+term;first=false;} else {out+=(neg?' − ':' + ')+term;} }
   return out===''?'0':out;
 }
+function rqGroup(lab){             // grupa jednostek dla trybu symbolicznego (R, q)
+  const base=lab.replace(/[₁₂]/g,'');
+  if(base==='w') return 'qR⁴/D';
+  if(base==='φ') return 'qR³/D';
+  if(base==='Q') return 'qR';
+  return 'qR²';                    // Mr, Mθ
+}
 /* równania w DOKŁADNEJ formie prowadzącego (D, ν symbolicznie); r podstawione liczbowo.
    Gdy q = 0 — człon obciążenia pomijamy (na pewno 0). */
 function exprW(L,r,q,hl){
@@ -394,6 +408,11 @@ document.querySelectorAll('.modecard').forEach(card=>{
     card.classList.add('on'); MODE=card.dataset.mode; refreshUI(); renderScheme();
   };
 });
+function applyFieldLabels(sym){
+  document.querySelectorAll('label[data-lbl-num]').forEach(l=>{
+    l.textContent = sym ? l.getAttribute('data-lbl-sym') : l.getAttribute('data-lbl-num');
+  });
+}
 function refreshUI(){
   $('g-solid').classList.toggle('hide',MODE!=='solid');
   $('g-ann').classList.toggle('hide',MODE!=='annulus');
@@ -401,9 +420,15 @@ function refreshUI(){
   $('fs-inner').classList.toggle('hide',MODE!=='annulus');
   $('fs-iface').classList.toggle('hide',MODE!=='two');
   $('outer_r_lbl').textContent = MODE==='solid' ? 'R' : 'b';
-  $('Drow').classList.toggle('hide', $('Dmode').value!=='num');
+  const sym = $('InputMode').value==='sym';
+  $('DmodeRow').classList.toggle('hide', sym);
+  $('Drow').classList.toggle('hide', sym || $('Dmode').value!=='num');
+  $('DmodeNote').classList.toggle('hide', sym);
+  $('SymNote').classList.toggle('hide', !sym);
+  applyFieldLabels(sym);
 }
 document.getElementById('Dmode').addEventListener('change',refreshUI);
+document.getElementById('InputMode').addEventListener('change',refreshUI);
 refreshUI();
 
 /* edge -> two conditions; returns [{q:'w'|'phi'|'Mr'|'Mth'|'Q', val:number}] */
@@ -446,36 +471,37 @@ function buildScheme(s){
   const apRaw=S_half*(a/b);
   const ap=Math.min(Math.max(apRaw,20),S_half-14);
   const q1=isFinite(s.q1)?s.q1:0, q2=isFinite(s.q2)?s.q2:0;
+  const RU=s.sym?'R':' m', QU=s.sym?'q':' kN/m²', MU=s.sym?'·qR²':'', PU=s.sym?'·qR':'';
   if(s.mode==='solid'){
     const Rp=S_half; outerRp=Rp;
     g+=sBand(S_cx-Rp,S_cx+Rp);
-    if(q1!==0) loaded.push([S_cx-Rp,S_cx+Rp,'q = '+sf(q1)+' kN/m²']);
+    if(q1!==0) loaded.push([S_cx-Rp,S_cx+Rp,'q = '+sf(q1)+QU]);
     edges=[{x:S_cx+Rp,dir:1,t:s.outerType,M:s.outerM,P:s.outerP},{x:S_cx-Rp,dir:-1,t:s.outerType,M:s.outerM,P:s.outerP}];
-    dims=[[S_cx,S_cx+Rp,S_baseY+95,'R = '+sf(R)+' m']];
+    dims=[[S_cx,S_cx+Rp,S_baseY+95,'R = '+sf(R)+RU]];
   } else if(s.mode==='annulus'){
     outerRp=S_half;
     g+=sBand(S_cx-S_half,S_cx-ap); g+=sBand(S_cx+ap,S_cx+S_half);
     g+=sLn(S_cx-ap,S_baseY,S_cx+ap,S_baseY,S_MUT,0.8,'3,3');
-    if(q1!==0){loaded.push([S_cx-S_half,S_cx-ap,'']); loaded.push([S_cx+ap,S_cx+S_half,'q = '+sf(q1)+' kN/m²']);}
+    if(q1!==0){loaded.push([S_cx-S_half,S_cx-ap,'']); loaded.push([S_cx+ap,S_cx+S_half,'q = '+sf(q1)+QU]);}
     edges=[{x:S_cx+S_half,dir:1,t:s.outerType,M:s.outerM,P:s.outerP},{x:S_cx-S_half,dir:-1,t:s.outerType,M:s.outerM,P:s.outerP},
            {x:S_cx+ap,dir:-1,t:s.innerType,M:s.innerM,P:s.innerP},{x:S_cx-ap,dir:1,t:s.innerType,M:s.innerM,P:s.innerP}];
-    dims=[[S_cx,S_cx+ap,S_baseY+95,'a = '+sf(a)+' m'],[S_cx,S_cx+S_half,S_baseY+122,'b = '+sf(b)+' m']];
+    dims=[[S_cx,S_cx+ap,S_baseY+95,'a = '+sf(a)+RU],[S_cx,S_cx+S_half,S_baseY+122,'b = '+sf(b)+RU]];
   } else {
     outerRp=S_half;
     g+=sBand(S_cx-S_half,S_cx+S_half);
     g+=sLn(S_cx-ap,S_pTop-6,S_cx-ap,S_pBot+6,S_MUT,1,'4,3');
     g+=sLn(S_cx+ap,S_pTop-6,S_cx+ap,S_pBot+6,S_MUT,1,'4,3');
-    if(q1!==0) loaded.push([S_cx-ap,S_cx+ap,'q₁='+sf(q1)]);
-    if(q2!==0){loaded.push([S_cx-S_half,S_cx-ap,'']); loaded.push([S_cx+ap,S_cx+S_half,'q₂='+sf(q2)]);}
+    if(q1!==0) loaded.push([S_cx-ap,S_cx+ap,'q₁='+sf(q1)+(s.sym?'q':'')]);
+    if(q2!==0){loaded.push([S_cx-S_half,S_cx-ap,'']); loaded.push([S_cx+ap,S_cx+S_half,'q₂='+sf(q2)+(s.sym?'q':'')]);}
     edges=[{x:S_cx+S_half,dir:1,t:s.outerType,M:s.outerM,P:s.outerP},{x:S_cx-S_half,dir:-1,t:s.outerType,M:s.outerM,P:s.outerP}];
     if(s.ifaceType==='ring'){g+=sPin(S_cx+ap);g+=sPin(S_cx-ap);}
     else{g+=sTxt(S_cx+ap,S_pTop-10,'styk',S_MUT,11);g+=sTxt(S_cx-ap,S_pTop-10,'styk',S_MUT,11);}
-    if(s.ifaceM&&s.ifaceM!==0){g+=sMoment(S_cx+ap,'M='+sf(s.ifaceM));g+=sMoment(S_cx-ap,'M='+sf(s.ifaceM));}
-    if(s.ifaceP&&s.ifaceP!==0){g+=sForce(S_cx+ap,'P='+sf(s.ifaceP));g+=sForce(S_cx-ap,'P='+sf(s.ifaceP));}
-    dims=[[S_cx,S_cx+ap,S_baseY+95,'a = '+sf(a)+' m'],[S_cx,S_cx+S_half,S_baseY+122,'b = '+sf(b)+' m']];
+    if(s.ifaceM&&s.ifaceM!==0){g+=sMoment(S_cx+ap,'M='+sf(s.ifaceM)+MU);g+=sMoment(S_cx-ap,'M='+sf(s.ifaceM)+MU);}
+    if(s.ifaceP&&s.ifaceP!==0){g+=sForce(S_cx+ap,'P='+sf(s.ifaceP)+PU);g+=sForce(S_cx-ap,'P='+sf(s.ifaceP)+PU);}
+    dims=[[S_cx,S_cx+ap,S_baseY+95,'a = '+sf(a)+RU],[S_cx,S_cx+S_half,S_baseY+122,'b = '+sf(b)+RU]];
   }
   loaded.forEach(L=>g+=sLoad(L[0],L[1],L[2]));
-  edges.forEach(e=>{g+=sSupport(e.x,e.dir,e.t);if(e.M&&e.M!==0)g+=sMoment(e.x,'M='+sf(e.M));if(e.P&&e.P!==0)g+=sForce(e.x,'P='+sf(e.P));});
+  edges.forEach(e=>{g+=sSupport(e.x,e.dir,e.t);if(e.M&&e.M!==0)g+=sMoment(e.x,'M='+sf(e.M)+MU);if(e.P&&e.P!==0)g+=sForce(e.x,'P='+sf(e.P)+PU);});
   g+=sTxt(S_cx+outerRp,S_capY,sSupLbl(s.outerType),S_INK,12);
   if(s.mode==='annulus') g+=sTxt(S_cx+ap,S_capY,sSupLbl(s.innerType),S_INK,12);
   if(s.mode==='two') g+=sTxt(S_cx+ap,S_capY,s.ifaceType==='ring'?'podpora pierśc.':'ciągłość',S_MUT,12);
@@ -543,7 +569,7 @@ function buildBC(s){
   return html;
 }
 function getState(){
-  const st={mode:MODE,
+  const st={mode:MODE, sym:$('InputMode').value==='sym',
     outerType:$('outer_type').value,outerM:parseFloat($('outer_M').value)||0,outerP:parseFloat($('outer_P').value)||0,
     innerType:$('inner_type').value,innerM:parseFloat($('inner_M').value)||0,innerP:parseFloat($('inner_P').value)||0,
     ifaceType:$('iface_type').value,ifaceM:parseFloat($('iface_M').value)||0,ifaceP:parseFloat($('iface_P').value)||0};
@@ -554,13 +580,19 @@ function getState(){
 }
 function updatePrintHead(){
   const s=getState();
-  let geo='';
-  if(s.mode==='solid') geo='Płyta pełna, R = '+sf(s.R)+' m';
-  else if(s.mode==='annulus') geo='Pierścień, r ∈ ('+sf(s.a)+', '+sf(s.b)+') m';
-  else geo='Płyta pełna + pierścień, r ∈ (0, '+sf(s.a)+', '+sf(s.b)+') m';
-  let Dtxt;
-  if($('Dmode').value==='num'){ const dv=parseFloat($('Dval').value); Dtxt = (isFinite(dv)&&dv>0)?('D = '+sf(dv)+' kN·m'):'D = (podaj wartość)'; }
-  else Dtxt='D — symbolicznie';
+  let geo='',Dtxt;
+  if(s.sym){
+    if(s.mode==='solid') geo='Płyta pełna, R = '+sf(s.R)+'R, q = '+sf(s.q1)+'q';
+    else if(s.mode==='annulus') geo='Pierścień, r ∈ ('+sf(s.a)+'R, '+sf(s.b)+'R), q = '+sf(s.q1)+'q';
+    else geo='Płyta pełna + pierścień, r ∈ (0, '+sf(s.a)+'R, '+sf(s.b)+'R)';
+    Dtxt='tryb symboliczny (R, q) — D symbolicznie';
+  } else {
+    if(s.mode==='solid') geo='Płyta pełna, R = '+sf(s.R)+' m';
+    else if(s.mode==='annulus') geo='Pierścień, r ∈ ('+sf(s.a)+', '+sf(s.b)+') m';
+    else geo='Płyta pełna + pierścień, r ∈ (0, '+sf(s.a)+', '+sf(s.b)+') m';
+    if($('Dmode').value==='num'){ const dv=parseFloat($('Dval').value); Dtxt = (isFinite(dv)&&dv>0)?('D = '+sf(dv)+' kN·m'):'D = (podaj wartość)'; }
+    else Dtxt='D — symbolicznie';
+  }
   $('print_data').innerHTML = geo + ' &nbsp;·&nbsp; ' + Dtxt + ' &nbsp;·&nbsp; ν = ' + sf(parseFloat($('nu').value));
 }
 function renderScheme(){
@@ -589,7 +621,7 @@ $('printBtn').onclick=()=>{
 
 /* ---------- zapisywanie / wczytywanie układów ---------- */
 const CFG_KEY='plyty_uklady_v1';
-const CFG_FIELDS=['R','q1s','a_ann','b_ann','q1a','a_two','b_two','q1t','q2t','outer_type','outer_M','outer_P','inner_type','inner_M','inner_P','iface_type','iface_M','iface_P','nu','Dmode','Dval'];
+const CFG_FIELDS=['R','q1s','a_ann','b_ann','q1a','a_two','b_two','q1t','q2t','outer_type','outer_M','outer_P','inner_type','inner_M','inner_P','iface_type','iface_M','iface_P','nu','Dmode','Dval','InputMode'];
 let CFG_OK=true;
 try{ localStorage.setItem('__plyty_t','1'); localStorage.removeItem('__plyty_t'); }catch(e){ CFG_OK=false; }
 function cfgStore(){ try{ return JSON.parse(localStorage.getItem(CFG_KEY)||'{}'); }catch(e){ return {}; } }
@@ -619,21 +651,24 @@ function cfgHas(v){ return v!==undefined && v!==null && v!==''; }
 function cfgSummary(cfg){        // "D=3·10⁵, q=8 kN/m², a=5, b=10, podpora pierścieniowa"
   if(!cfg||!cfg.fields) return '';
   const f=cfg.fields, p=[];
-  if(f.Dmode==='num'){ const dv=parseFloat(f.Dval); if(isFinite(dv)&&dv>0) p.push('D='+cfgFmtD(dv)); }
+  const sym=f.InputMode==='sym';
+  const qU=v=>v+(sym?'q':' kN/m²'), rU=v=>v+(sym?'R':'');
+  if(sym) p.push('symboliczny (R,q)');
+  else if(f.Dmode==='num'){ const dv=parseFloat(f.Dval); if(isFinite(dv)&&dv>0) p.push('D='+cfgFmtD(dv)); }
   if(cfg.mode==='solid'){
-    if(cfgHas(f.q1s)) p.push('q='+f.q1s+' kN/m²');
-    if(cfgHas(f.R)) p.push('R='+f.R);
+    if(cfgHas(f.q1s)) p.push('q='+qU(f.q1s));
+    if(cfgHas(f.R)) p.push('R='+rU(f.R));
     if(f.outer_type) p.push(cfgSupFull(f.outer_type));
   } else if(cfg.mode==='annulus'){
-    if(cfgHas(f.q1a)) p.push('q='+f.q1a+' kN/m²');
-    if(cfgHas(f.a_ann)) p.push('a='+f.a_ann);
-    if(cfgHas(f.b_ann)) p.push('b='+f.b_ann);
+    if(cfgHas(f.q1a)) p.push('q='+qU(f.q1a));
+    if(cfgHas(f.a_ann)) p.push('a='+rU(f.a_ann));
+    if(cfgHas(f.b_ann)) p.push('b='+rU(f.b_ann));
     if(f.outer_type) p.push(cfgSupFull(f.outer_type));
   } else if(cfg.mode==='two'){
     const qi=f.q1t, qo=f.q2t;
-    if(cfgHas(qi)) p.push('q='+((cfgHas(qo)&&qo!==qi)?qi+'/'+qo:qi)+' kN/m²');
-    if(cfgHas(f.a_two)) p.push('a='+f.a_two);
-    if(cfgHas(f.b_two)) p.push('b='+f.b_two);
+    if(cfgHas(qi)) p.push('q='+((cfgHas(qo)&&qo!==qi)?(qi+'/'+qo+(sym?'q':' kN/m²')):qU(qi)));
+    if(cfgHas(f.a_two)) p.push('a='+rU(f.a_two));
+    if(cfgHas(f.b_two)) p.push('b='+rU(f.b_two));
     if(f.iface_type) p.push(f.iface_type==='ring'?'podpora pierścieniowa':'ciągłość');
   }
   return p.join(', ');
@@ -684,9 +719,10 @@ cfgRefreshList();
 if(!CFG_OK) cfgMsg('Zapis działa po pobraniu i otwarciu pliku w przeglądarce.');
 
 function compute(){
+  const SYM_RQ = $('InputMode').value==='sym';
   const nu=parseFloat($('nu').value); const D=1; // solver: D=1; stałe ∝ 1/D
   let Ddiv=1, Dnum=false, Dval=null;
-  if($('Dmode').value==='num'){ const dv=parseFloat($('Dval').value); if(isFinite(dv)&&dv>0){Ddiv=dv;Dnum=true;Dval=dv;} }
+  if(!SYM_RQ && $('Dmode').value==='num'){ const dv=parseFloat($('Dval').value); if(isFinite(dv)&&dv>0){Ddiv=dv;Dnum=true;Dval=dv;} }
   let regions=[], conds=[], N, labels=[], eqLines=[], rA=null,rB,qInner,qOuter;
 
   if(MODE==='solid'){
@@ -749,14 +785,15 @@ function compute(){
   /* -------- render -------- */
   const Qname={w:'w',phi:'φ',Mr:'Mr',Mth:'Mθ',Q:'Q'};
   let html='';
+  const rU=v=>v+(SYM_RQ?'R':' m'), qU=v=>v+(SYM_RQ?'q':' kN/m²');
 
   // SECTION: model summary
   html+='<div class="print-hide">';
   html+='<h2 class="sec"><span class="n">2</span>Przyjęty model</h2>';
   html+='<div class="panel"><div>';
-  if(MODE==='solid') html+='Płyta <b>pełna</b>, r ∈ (0, '+rB+' m), q = '+regions[0].q+' kN/m². ';
-  if(MODE==='annulus') html+='<b>Pierścień</b>, r ∈ ('+rA+', '+rB+') m, q = '+regions[0].q+' kN/m². ';
-  if(MODE==='two') html+='Płyta <b>pełna + pierścień</b>: wewn. r∈(0,'+rA+') q='+qInner+', zewn. r∈('+rA+','+rB+') q='+qOuter+' kN/m². ';
+  if(MODE==='solid') html+='Płyta <b>pełna</b>, r ∈ (0, '+rU(rB)+'), q = '+qU(regions[0].q)+'. ';
+  if(MODE==='annulus') html+='<b>Pierścień</b>, r ∈ ('+rU(rA)+', '+rU(rB)+'), q = '+qU(regions[0].q)+'. ';
+  if(MODE==='two') html+='Płyta <b>pełna + pierścień</b>: wewn. r∈(0,'+rU(rA)+') q='+qU(qInner)+', zewn. r∈('+rU(rA)+','+rU(rB)+') q='+qU(qOuter)+'. ';
   html+='ν = '+nu+'.</div>';
   html+='<div style="margin-top:8px">';
   labels.forEach(l=>html+='<span class="pill">'+l+'</span>');
@@ -805,6 +842,7 @@ function compute(){
     const cfWs=i=>L[i], cfWn=i=>Dnum?'('+f(xv[i]/Ddiv)+')':'('+f(xv[i])+'/D)';
     const cfMs=i=>L[i]+'·D', cfMn=i=>'('+f(xv[i])+')';
     const resWD=val=>Dnum?f(val/Ddiv):(Math.abs(val)<1e-12?'0':f(val)+'/D');
+    const rfWD=SYM_RQ?f:resWD;
 
     let wT=[{c:xA,t:''},{c:xB,t:'r²'}]; if(hl){wT.push({c:xE,t:'ln r'});wT.push({c:xF,t:'r²·ln r'});} wT.push({c:q/64,t:'r⁴'});
     let pT=[{c:2*xB,t:'r'}]; if(hl){pT.push({c:xE,t:'(1/r)'});pT.push({c:2*xF,t:'r·ln r'});pT.push({c:xF,t:'r'});} pT.push({c:q/16,t:'r³'});
@@ -820,8 +858,8 @@ function compute(){
 
     const pts=[reg.rStart, reg.rEnd];
     const quants=[
-      {lab:'w'+sub,gen:genW,B:Bw,cfs:cfWs,cfn:cfWn,hasD:true,T:wT,rf:resWD},
-      {lab:'φ'+sub,gen:genP,B:Bp,cfs:cfWs,cfn:cfWn,hasD:true,T:pT,rf:resWD},
+      {lab:'w'+sub,gen:genW,B:Bw,cfs:cfWs,cfn:cfWn,hasD:true,T:wT,rf:rfWD},
+      {lab:'φ'+sub,gen:genP,B:Bp,cfs:cfWs,cfn:cfWn,hasD:true,T:pT,rf:rfWD},
       {lab:'Mr'+sub,gen:genMr,B:BMr,cfs:cfMs,cfn:cfMn,hasD:false,T:mrT,rf:f},
       {lab:'Mθ'+sub,gen:genMth,B:BMth,cfs:cfMs,cfn:cfMn,hasD:false,T:mtT,rf:f},
       {lab:'Q'+sub,gen:genQ,B:BQ,cfs:cfMs,cfn:cfMn,hasD:false,T:qT,rf:f}
@@ -832,15 +870,16 @@ function compute(){
       pts.forEach(rk=>{
         const rs=rk<1e-9?'0':f(rk), rv=rk<1e-9?0:rk;
         const res=Q.rf(evalTerms(Q.T,rv));
+        const tail=SYM_RQ?(' · '+rqGroup(Q.lab)):'';
         const fS=Q.hasD?Q.B(Q.cfs,rs,q,hl,Dpt):Q.B(Q.cfs,rs,q,hl);
         const fN=Q.hasD?Q.B(Q.cfn,rs,q,hl,Dpt):Q.B(Q.cfn,rs,q,hl);
-        h+='<span class="fl gap">'+Q.lab+'('+rs+') = '+fS+' = <b>'+res+'</b></span>'
-          +'<span class="fl">'+Q.lab+'('+rs+') = '+fN+' = <b>'+res+'</b></span>';
+        h+='<span class="fl gap">'+Q.lab+'('+rs+') = '+fS+' = <b>'+res+tail+'</b></span>'
+          +'<span class="fl">'+Q.lab+'('+rs+') = '+fN+' = <b>'+res+tail+'</b></span>';
       });
       h+='</div>'; html+=h;
     });
   });
-  html+='<div class="note">'+(Dnum?'Jednostki: w [m], φ [rad], Q [kN/m], Mr, Mθ [kN·m/m]. D = '+f(Dval)+' kN·m.':'w, φ — w postaci „liczba / D"; Q [kN/m]; Mr, Mθ [kN·m/m] — nie zależą od D.')+'</div>';
+  html+='<div class="note">'+(SYM_RQ?'Wyniki to współczynniki: w = (liczba)·qR⁴/D, φ = (liczba)·qR³/D (zawierają 1/D); Mr, Mθ = (liczba)·qR², Q = (liczba)·qR — nie zależą od D.':Dnum?'Jednostki: w [m], φ [rad], Q [kN/m], Mr, Mθ [kN·m/m]. D = '+f(Dval)+' kN·m.':'w, φ — w postaci „liczba / D"; Q [kN/m]; Mr, Mθ [kN·m/m] — nie zależą od D.')+'</div>';
 
   // SECTION: values table
   html+='<h2 class="sec"><span class="n">6</span>Wartości w punktach charakterystycznych</h2>';
@@ -848,24 +887,24 @@ function compute(){
   if(MODE==='solid'){ pts=[[0,evals[0]],[rB/2,evals[0]],[rB,evals[0]]]; }
   else if(MODE==='annulus'){ pts=[[rA,evals[0]],[(rA+rB)/2,evals[0]],[rB,evals[0]]]; }
   else { pts=[[0,evals[0]],[rA*0.999,evals[0]],[rA,evals[1]],[(rA+rB)/2,evals[1]],[rB,evals[1]]]; }
-  html+='<table class="vals"><tr><th>r [m]</th><th>'+(Dnum?'w [m]':'w·D')+'</th><th>'+(Dnum?'φ [rad]':'φ·D')+'</th><th>Q</th><th>Mr</th><th>Mθ</th></tr>';
+  html+='<table class="vals"><tr><th>'+(SYM_RQ?'r (×R)':'r [m]')+'</th><th>'+(SYM_RQ?'w (×qR⁴/D)':Dnum?'w [m]':'w·D')+'</th><th>'+(SYM_RQ?'φ (×qR³/D)':Dnum?'φ [rad]':'φ·D')+'</th><th>'+(SYM_RQ?'Q (×qR)':'Q')+'</th><th>'+(SYM_RQ?'Mr (×qR²)':'Mr')+'</th><th>'+(SYM_RQ?'Mθ (×qR²)':'Mθ')+'</th></tr>';
   pts.forEach(([r,E])=>{
     const rr = r<=0?1e-4:r;
     html+='<tr><td>'+(r<1e-3?'0':f(r))+'</td><td>'+f(E.ev.wD(rr)/Ddiv)+'</td><td>'+f(E.ev.phiD(rr)/Ddiv)+'</td><td>'+f(E.ev.Q(rr))+'</td><td>'+f(E.ev.Mr(rr))+'</td><td>'+f(E.ev.Mth(rr))+'</td></tr>';
   });
   html+='</table>';
-  html+='<div class="note">'+(Dnum?'Wartości policzone dla D = '+f(Dval)+' kN·m. w [m], φ [rad], Q [kN/m], Mr, Mθ [kN·m/m].':'w·D oznacza wartość w pomnożoną przez D (czyli w = pokazana liczba / D).')+'</div>';
+  html+='<div class="note">'+(SYM_RQ?'Wartości to współczynniki: w i φ zawierają 1/D (mnożnik qR⁴/D, qR³/D), Mr, Mθ, Q nie zależą od D (mnożniki qR², qR).':Dnum?'Wartości policzone dla D = '+f(Dval)+' kN·m. w [m], φ [rad], Q [kN/m], Mr, Mθ [kN·m/m].':'w·D oznacza wartość w pomnożoną przez D (czyli w = pokazana liczba / D).')+'</div>';
 
   // SECTION: charts
   html+='<h2 class="sec"><span class="n">7</span>Wykresy</h2>';
   html+='<div class="charts">'
-    +'<div class="chartbox"><h4>'+(Dnum?'w [m] (ugięcie)':'w·D (ugięcie ×D)')+'</h4><canvas id="c_w"></canvas></div>'
-    +'<div class="chartbox"><h4>'+(Dnum?'φ [rad] (kąt obrotu)':'φ·D (kąt obrotu ×D)')+'</h4><canvas id="c_phi"></canvas></div>'
-    +'<div class="chartbox"><h4>Q [kN/m] (siła poprzeczna)</h4><canvas id="c_q"></canvas></div>'
-    +'<div class="chartbox"><h4>Mr [kN·m/m] (moment promieniowy)</h4><canvas id="c_mr"></canvas></div>'
-    +'<div class="chartbox"><h4>Mθ [kN·m/m] (moment obwodowy)</h4><canvas id="c_mth"></canvas></div>'
+    +'<div class="chartbox"><h4>'+(SYM_RQ?'w — współczynnik ×qR⁴/D':Dnum?'w [m] (ugięcie)':'w·D (ugięcie ×D)')+'</h4><canvas id="c_w"></canvas></div>'
+    +'<div class="chartbox"><h4>'+(SYM_RQ?'φ — współczynnik ×qR³/D':Dnum?'φ [rad] (kąt obrotu)':'φ·D (kąt obrotu ×D)')+'</h4><canvas id="c_phi"></canvas></div>'
+    +'<div class="chartbox"><h4>'+(SYM_RQ?'Q — współczynnik ×qR':'Q [kN/m] (siła poprzeczna)')+'</h4><canvas id="c_q"></canvas></div>'
+    +'<div class="chartbox"><h4>'+(SYM_RQ?'Mr — współczynnik ×qR²':'Mr [kN·m/m] (moment promieniowy)')+'</h4><canvas id="c_mr"></canvas></div>'
+    +'<div class="chartbox"><h4>'+(SYM_RQ?'Mθ — współczynnik ×qR²':'Mθ [kN·m/m] (moment obwodowy)')+'</h4><canvas id="c_mth"></canvas></div>'
     +'</div>';
-  html+='<div class="legend-sup">Wykresy wzdłuż całej średnicy (−R…0…R). <b>Kropki</b> = punkty charakterystyczne (środek, podpory/styki, brzegi) z wartościami (etykiety dla r ≥ 0). w, Mr, Mθ są symetryczne; φ i Q antysymetryczne (zmieniają znak po drugiej stronie środka). Skoki Q/Mr w miejscach przyłożenia sił/momentów są fizyczne.</div>';
+  html+='<div class="legend-sup">Wykresy wzdłuż całej średnicy (−R…0…R). <b>Kropki</b> = punkty charakterystyczne (środek, podpory/styki, brzegi) z wartościami (etykiety dla r ≥ 0). w, Mr, Mθ są symetryczne; φ i Q antysymetryczne (zmieniają znak po drugiej stronie środka). Skoki Q/Mr w miejscach przyłożenia sił/momentów są fizyczne.'+(SYM_RQ?' Oś r jest wielokrotnością R.':'')+'</div>';
 
   $('out').innerHTML=html;
 
@@ -997,7 +1036,7 @@ const PP2_PRESETS = [
 ];
 function pp2Config(p){
   return {mode:'two', fields:{
-    nu:'0.3', Dmode:'num', Dval:String(p.D),
+    InputMode:'num', nu:'0.3', Dmode:'num', Dval:String(p.D),
     a_two:String(p.a), b_two:String(p.b),
     q1t:'0', q2t:String(p.q),                       // q tylko na zewnętrznym pierścieniu
     iface_type:p.iface, iface_M:'0', iface_P:'0',
@@ -1011,14 +1050,42 @@ function pp2Label(p,i){
 function pp2Load(i){
   const p=PP2_PRESETS[i]; if(!p) return;
   applyConfig(pp2Config(p));        // ustawia tryb + pola, odświeża UI i schemat
-  $('presetList').value=String(i);
+  $('presetList').value='pp2-'+i;
   $('go').click();                  // od razu licz
+}
+
+/* ====================== PRZYKŁADY SYMBOLICZNE (R, q) ====================== */
+const SYM_PRESETS = [
+  {name:'Płyta pełna, utwierdzona (R, q)', cfg:{mode:'solid', fields:{
+    InputMode:'sym', nu:'0.3', R:'1', q1s:'1',
+    outer_type:'clamped', outer_M:'0', outer_P:'0'
+  }}},
+  {name:'Pełna + pierścień, obciążenie tylko na pierścieniu (R, q)', cfg:{mode:'two', fields:{
+    InputMode:'sym', nu:'0.3', a_two:'1', b_two:'2',
+    q1t:'0', q2t:'1',
+    iface_type:'cont', iface_M:'0', iface_P:'0',
+    outer_type:'clamped', outer_M:'0', outer_P:'0'
+  }}},
+];
+function loadPreset(v){
+  if(v.indexOf('pp2-')===0){ pp2Load(parseInt(v.slice(4),10)); return; }
+  if(v.indexOf('sym-')===0){
+    const p=SYM_PRESETS[parseInt(v.slice(4),10)]; if(!p) return;
+    applyConfig(p.cfg);              // ustawia tryb + pola, odświeża UI i schemat
+    $('presetList').value=v;
+    $('go').click();                 // od razu licz
+  }
 }
 (function initPresets(){
   const sel=$('presetList'); if(!sel) return;
-  sel.innerHTML = PP2_PRESETS.map((p,i)=>'<option value="'+i+'">'+cfgEsc(pp2Label(p,i))+'</option>').join('');
-  sel.onchange=()=>{ if(sel.value!=='') pp2Load(parseInt(sel.value,10)); };
-  pp2Load(0);                       // „nie pusty start" — domyślnie Wariant 1
+  sel.innerHTML =
+    '<optgroup label="PP2 — warianty liczbowe">'
+    +PP2_PRESETS.map((p,i)=>'<option value="pp2-'+i+'">'+cfgEsc(pp2Label(p,i))+'</option>').join('')
+    +'</optgroup><optgroup label="Tryb symboliczny (R, q)">'
+    +SYM_PRESETS.map((p,i)=>'<option value="sym-'+i+'">'+cfgEsc(p.name)+'</option>').join('')
+    +'</optgroup>';
+  sel.onchange=()=>{ if(sel.value!=='') loadPreset(sel.value); };
+  loadPreset('pp2-0');              // „nie pusty start" — domyślnie Wariant 1
 })();
 </script>
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "49eb633d81444e41ba0fd10d03fef9c2"}'></script><!-- End Cloudflare Web Analytics -->

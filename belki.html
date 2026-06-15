@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analizator belek — reakcje i siły wewnętrzne N, T, M</title>
+<style>
+  :root{
+    --ink:#16243a; --paper:#fbfaf5; --line:#c9d6e3; --grid:#dde7ef;
+    --blue:#1f3a93; --red:#b6312a; --green:#27632a; --gold:#a9772b;
+    --card:#ffffff; --muted:#5a6b80;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    color:var(--ink); background:var(--paper);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:22px 22px; line-height:1.5; padding:0 0 80px;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:0 16px}
+  header.top{border-bottom:2px solid var(--ink); margin-top:18px; padding-bottom:10px;}
+  header.top h1{font-size:1.5rem;margin:0 0 2px;letter-spacing:.3px}
+  header.top .sub{color:var(--muted);font-size:.9rem;font-style:italic}
+  h2.sec{font-size:1.05rem;margin:26px 0 10px;padding-bottom:4px;border-bottom:1px dashed var(--line);
+    color:var(--blue);display:flex;align-items:center;gap:8px;}
+  h2.sec .n{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;background:var(--blue);color:#fff;border-radius:4px;padding:1px 7px;}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 14px 16px;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  label{display:block;font-size:.82rem;color:var(--muted);margin:10px 0 3px;font-style:italic}
+  input,select{width:100%;font:inherit;font-size:.95rem;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#eef2f7;color:var(--ink)}
+  input:focus,select:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:var(--blue);background:#fff}
+  fieldset{border:1px solid var(--line);border-radius:8px;margin:14px 0 0;padding:8px 12px 12px}
+  legend{font-size:.8rem;color:var(--blue);font-weight:600;padding:0 6px;font-style:normal}
+  .btn{margin-top:18px;width:100%;font:inherit;font-weight:700;font-size:1.05rem;background:var(--red);color:#fff;border:none;border-radius:9px;padding:14px;cursor:pointer;letter-spacing:.5px;box-shadow:0 2px 0 #7e201b;transition:.1s}
+  .btn:active{transform:translateY(2px);box-shadow:0 0 0 #7e201b}
+  .btns{font:inherit;font-weight:600;font-size:.9rem;background:var(--blue);color:#fff;border:none;border-radius:7px;padding:9px 8px;cursor:pointer;width:100%}
+  .btns.del{background:#8a3b34;width:auto;padding:7px 11px}
+  .addbtn{margin-top:10px;background:var(--green);width:100%}
+  .hide{display:none !important}
+  .item{border:1px solid var(--line);border-radius:8px;padding:8px 10px 10px;margin:8px 0;background:#fcfdff}
+  .item .hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .item .hd .t{font-size:.8rem;color:var(--blue);font-weight:600}
+  .grow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+  .grow.g3{grid-template-columns:1fr 1fr 1fr}
+  #out{margin-top:8px}
+  .formula{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88rem;background:#f3f1e8;border:1px solid var(--line);border-left:4px solid var(--blue);padding:10px 12px 10px 26px;border-radius:6px;margin:8px 0;white-space:normal;overflow-wrap:break-word;text-indent:-14px}
+  .formula .step{font-family:system-ui,-apple-system,sans-serif;font-style:italic;color:var(--muted);font-size:.78rem}
+  .formula .fl{display:block;text-indent:-14px;margin:2px 0}
+  .formula .fl.gap{margin-top:8px}
+  .formula b{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .result-const{background:#fff;border:2px solid var(--red);border-radius:8px;padding:12px 14px;margin:10px 0;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .result-const .ttl{font-family:inherit;font-style:italic;color:var(--red);font-size:.82rem;margin-bottom:6px;font-weight:600}
+  .result-const div.c{font-size:1.0rem;padding:4px 0;border-bottom:1px dotted var(--line)}
+  .result-const div.c:last-child{border:none}
+  .result-const .sub{font-size:.78rem;color:var(--muted);font-style:italic}
+  .note{font-size:.82rem;color:var(--muted);font-style:italic;margin:6px 2px}
+  .err{background:#fff0ef;border:1px solid var(--red);color:var(--red);padding:12px;border-radius:8px;margin:10px 0}
+  .ok-check{font-size:.82rem;color:var(--green);font-style:italic;margin:6px 2px}
+  .scheme-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px;margin:0 0 12px;box-shadow:0 1px 0 rgba(0,0,0,.03);overflow-x:auto}
+  .scheme-card .cap{font-size:.8rem;color:var(--muted);font-style:italic;margin:2px 6px 0}
+  .scheme-card svg{width:100%;height:auto;min-width:380px;display:block}
+  .scheme-legend{font-size:.72rem;color:var(--muted);margin:2px 6px 4px}
+  .scheme-legend b{color:var(--ink);font-weight:600}
+  table.vals{width:100%;border-collapse:collapse;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;margin:8px 0}
+  table.vals th,table.vals td{border:1px solid var(--line);padding:4px 6px;text-align:right}
+  table.vals th{background:#eef2fb;color:var(--blue);text-align:center}
+  table.vals td:first-child,table.vals th:first-child{text-align:center;background:#f7f9fc}
+  .print-only{display:none}
+  @media print{
+    @page{margin:12mm}
+    html,body{background:#fff !important;background-image:none !important;overflow:visible !important}
+    .wrap{max-width:100%;padding:0}
+    header.top,.no-print,.scheme-legend{display:none !important}
+    .print-only{display:block !important}
+    h2.sec{page-break-after:avoid;border-color:#999} h2.sec .n{display:none}
+    .formula,.result-const,.scheme-card,table.vals{page-break-inside:avoid;background:#fff !important}
+    .scheme-card{box-shadow:none !important;border-color:#bbb !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Analizator belek — N, T, M</h1>
+    <div class="sub">Belki płaskie statycznie wyznaczalne (także belki Gerbera z przegubami) · reakcje, siła normalna, tnąca i moment zginający</div>
+  </header>
+
+  <h2 class="sec no-print"><span class="n">1</span>Zamodeluj belkę</h2>
+
+  <div class="print-only" id="print_head" style="margin:0 0 10px;border-bottom:2px solid #16243a;padding-bottom:8px">
+    <div style="font-size:1.25rem;font-weight:700">Analiza belki — reakcje i siły wewnętrzne</div>
+    <div id="print_data" style="font-size:.9rem;margin-top:3px"></div>
+  </div>
+
+  <div class="scheme-card">
+    <div class="cap">Schemat statyczny belki</div>
+    <svg id="scheme" viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="scheme-legend">Oś x od lewego końca, w prawo. Siły pionowe: w górę „+". <b>Czerwone</b> — obciążenia, <b>○</b> — przegub wewnętrzny (M=0), <b>zielone/niebieskie</b> — reakcje.</div>
+  </div>
+
+  <div class="panel no-print">
+    <fieldset style="margin-bottom:6px">
+      <legend>📋 Przykłady do wczytania</legend>
+      <div class="grow" style="grid-template-columns:1fr auto;align-items:end">
+        <select id="exampleList"></select>
+        <button class="btns" id="loadExample" style="width:auto;padding:9px 14px">Wczytaj</button>
+      </div>
+    </fieldset>
+
+    <label for="L">Długość belki L [m]</label>
+    <input id="L" type="number" step="any" value="10">
+
+    <fieldset>
+      <legend>Podpory</legend>
+      <div id="supports"></div>
+      <button class="btns addbtn" id="addSupport">+ dodaj podporę</button>
+      <div class="note">przesuwna (V) · przegubowa/stała (V, H) · utwierdzenie (V, H, M). Liczba niewiadomych musi = 3 + liczba przegubów.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Przeguby wewnętrzne (belka Gerbera)</legend>
+      <div id="hinges"></div>
+      <button class="btns addbtn" id="addHinge">+ dodaj przegub</button>
+      <div class="note">Każdy przegub wnosi warunek: moment zginający = 0 w tym punkcie.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Obciążenia</legend>
+      <div id="loads"></div>
+      <button class="btns addbtn" id="addLoad">+ dodaj obciążenie</button>
+      <div class="note">Siła skupiona: składowe P<sub>x</sub>/P<sub>y</sub> albo wartość P + kąt α (P<sub>x</sub>=P·cos α, P<sub>y</sub>=P·sin α). q [kN/m] na odcinku. Moment [kN·m], dodatni przeciwnie do wskazówek (CCW).</div>
+    </fieldset>
+
+    <button class="btn" id="go">Oblicz reakcje i wykresy</button>
+  </div>
+
+  <h2 class="sec"><span class="n">2</span>Wyniki</h2>
+  <div id="out"></div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const SVGNS = "http://www.w3.org/2000/svg";
+
+/* ===== formatowanie ===== */
+function fmt(v){ if(!isFinite(v)) return "—"; if(Math.abs(v)<5e-4) v=0; let s=(Math.round(v*1000)/1000).toString(); return s; }
+function letter(i){ return String.fromCharCode(65+i); }
+
+/* ===== model <-> DOM ===== */
+const SUP_TYPES=[{v:"roller",t:"przesuwna (V)"},{v:"pin",t:"przegubowa / stała (V, H)"},{v:"fixed",t:"utwierdzenie (V, H, M)"}];
+const LOAD_KINDS=[{v:"P",t:"siła skupiona P"},{v:"q",t:"obciążenie równomierne q"},{v:"M",t:"moment skupiony M"}];
+
+function supportRow(s){
+  s=s||{x:0,type:"roller"};
+  const el=document.createElement("div"); el.className="item"; el.dataset.kind="support";
+  el.innerHTML='<div class="hd"><span class="t">Podpora</span><button class="btns del" type="button">usuń</button></div>'+
+    '<div class="grow"><div><label>Pozycja x [m]</label><input class="sx" type="number" step="any"></div>'+
+    '<div><label>Typ</label><select class="st">'+SUP_TYPES.map(o=>'<option value="'+o.v+'">'+o.t+'</option>').join('')+'</select></div></div>';
+  el.querySelector(".sx").value=s.x; el.querySelector(".st").value=s.type;
+  el.querySelector(".del").addEventListener("click",()=>{el.remove();liveDraw();});
+  el.addEventListener("input",liveDraw);
+  return el;
+}
+function hingeRow(x){
+  x=(x==null?0:x);
+  const el=document.createElement("div"); el.className="item"; el.dataset.kind="hinge";
+  el.innerHTML='<div class="hd"><span class="t">Przegub</span><button class="btns del" type="button">usuń</button></div>'+
+    '<div><label>Pozycja x [m]</label><input class="hx" type="number" step="any"></div>';
+  el.querySelector(".hx").value=x;
+  el.querySelector(".del").addEventListener("click",()=>{el.remove();liveDraw();});
+  el.addEventListener("input",liveDraw);
+  return el;
+}
+function loadFields(kind,l){
+  if(kind==="P"){
+    const mode=l.mode||((l.P!=null&&l.ang!=null)?"polar":"comp");
+    const oc='<option value="comp"'+(mode==="comp"?" selected":"")+'>składowe P_x, P_y</option>';
+    const op='<option value="polar"'+(mode==="polar"?" selected":"")+'>wartość P + kąt α</option>';
+    let h='<label>Sposób zadania siły</label><select class="pmode">'+oc+op+'</select>'+
+      '<div class="grow g3" style="margin-top:6px"><div><label>Pozycja x [m]</label><input class="lx" type="number" step="any" value="'+(l.x??0)+'"></div>';
+    if(mode==="polar"){
+      h+='<div><label>Wartość P [kN]</label><input class="lP" type="number" step="any" value="'+(l.P??0)+'"></div>'+
+         '<div><label>Kąt α [°] (od poziomu, CCW+)</label><input class="lang" type="number" step="any" value="'+(l.ang??0)+'"></div></div>'+
+         '<div class="note" style="margin-top:4px">P_x = P·cos α, P_y = P·sin α. Np. w dół: α=−90°; w prawo: α=0°.</div>';
+    } else {
+      h+='<div><label>Pionowa P_y [kN] (↑+ ↓−)</label><input class="lpy" type="number" step="any" value="'+(l.Py??0)+'"></div>'+
+         '<div><label>Pozioma P_x [kN] (→+)</label><input class="lpx" type="number" step="any" value="'+(l.Px??0)+'"></div></div>';
+    }
+    return h;
+  }
+  if(kind==="q"){
+    return '<div class="grow g3"><div><label>Od x₁ [m]</label><input class="lx1" type="number" step="any" value="'+(l.x1??0)+'"></div>'+
+      '<div><label>Do x₂ [m]</label><input class="lx2" type="number" step="any" value="'+(l.x2??0)+'"></div>'+
+      '<div><label>q [kN/m] (↑+ ↓−)</label><input class="lw" type="number" step="any" value="'+(l.w??0)+'"></div></div>';
+  }
+  return '<div class="grow"><div><label>Pozycja x [m]</label><input class="lx" type="number" step="any" value="'+(l.x??0)+'"></div>'+
+    '<div><label>M [kN·m] (CCW+)</label><input class="lm" type="number" step="any" value="'+(l.M??0)+'"></div></div>';
+}
+function renderLoadFields(fields,kind,l){
+  fields.innerHTML=loadFields(kind,l);
+  const pm=fields.querySelector(".pmode");
+  if(pm) pm.addEventListener("change",()=>{const xe=fields.querySelector(".lx");renderLoadFields(fields,"P",{mode:pm.value,x:xe?parseFloat(xe.value)||0:0});liveDraw();});
+}
+function loadRow(l){
+  l=l||{kind:"P",mode:"comp",x:0,Py:0,Px:0};
+  const el=document.createElement("div"); el.className="item"; el.dataset.kind="load";
+  el.innerHTML='<div class="hd"><select class="lk" style="width:auto;flex:1">'+
+    LOAD_KINDS.map(o=>'<option value="'+o.v+'">'+o.t+'</option>').join('')+'</select>'+
+    '<button class="btns del" type="button">usuń</button></div><div class="fields"></div>';
+  const sel=el.querySelector(".lk"); sel.value=l.kind;
+  const fields=el.querySelector(".fields"); renderLoadFields(fields,l.kind,l);
+  sel.addEventListener("change",()=>{renderLoadFields(fields,sel.value,{});liveDraw();});
+  el.querySelector(".del").addEventListener("click",()=>{el.remove();liveDraw();});
+  el.addEventListener("input",liveDraw);
+  return el;
+}
+function num(el,sel){const e=el.querySelector(sel); if(!e)return 0; const v=parseFloat(e.value); return isFinite(v)?v:0;}
+
+function readModel(){
+  const L=parseFloat($("L").value);
+  const supports=[...$("supports").children].map(el=>({x:parseFloat(el.querySelector(".sx").value),type:el.querySelector(".st").value}));
+  const hinges=[...$("hinges").children].map(el=>parseFloat(el.querySelector(".hx").value)).filter(x=>isFinite(x));
+  const loads=[...$("loads").children].map(el=>{
+    const kind=el.querySelector(".lk").value;
+    if(kind==="P"){
+      const x=num(el,".lx"); const pm=el.querySelector(".pmode"); const mode=pm?pm.value:"comp";
+      if(mode==="polar"){const P=num(el,".lP"),ang=num(el,".lang"),r=ang*Math.PI/180; return {kind,mode:"polar",x,P,ang,Px:P*Math.cos(r),Py:P*Math.sin(r)};}
+      return {kind,mode:"comp",x,Py:num(el,".lpy"),Px:num(el,".lpx")};
+    }
+    if(kind==="q") return {kind,x1:num(el,".lx1"),x2:num(el,".lx2"),w:num(el,".lw")};
+    return {kind:"M",x:num(el,".lx"),M:num(el,".lm")};
+  });
+  return {L,supports,hinges,loads};
+}
+function setModel(m){
+  $("L").value=m.L;
+  const sc=$("supports"); sc.innerHTML=""; m.supports.forEach(s=>sc.appendChild(supportRow(s)));
+  const hc=$("hinges"); hc.innerHTML=""; (m.hinges||[]).forEach(x=>hc.appendChild(hingeRow(x)));
+  const lc=$("loads"); lc.innerHTML=""; m.loads.forEach(l=>lc.appendChild(loadRow(l)));
+}
+
+/* ===== solver ===== */
+function buildUnknowns(supports){
+  const u=[];
+  supports.forEach((s,i)=>{
+    if(s.type==="roller") u.push({sup:i,comp:"V"});
+    else if(s.type==="pin"){u.push({sup:i,comp:"V"});u.push({sup:i,comp:"H"});}
+    else if(s.type==="fixed"){u.push({sup:i,comp:"V"});u.push({sup:i,comp:"H"});u.push({sup:i,comp:"M"});}
+  });
+  return u;
+}
+// agregat obciążeń: siły i moment CCW względem punktu p, biorąc tylko pozycje < cutoff (q przycinane)
+function loadAgg(loads,p,cutoff){
+  let Fx=0,Fy=0,Mz=0; const parts=[];
+  loads.forEach(l=>{
+    if(l.kind==="P"){
+      if(l.x<cutoff){Fx+=l.Px;Fy+=l.Py;Mz+=(l.x-p)*l.Py; parts.push({t:"P",x:l.x,Px:l.Px,Py:l.Py,polar:l.mode==="polar",P:l.P,ang:l.ang});}
+    } else if(l.kind==="q"){
+      const a=l.x1, b=Math.min(l.x2,cutoff);
+      if(b>a){const R=l.w*(b-a),c=(a+b)/2; Fy+=R; Mz+=(c-p)*R; parts.push({t:"q",R,c,w:l.w,x1:a,x2:b,full:l.x2<=cutoff});}
+    } else {
+      if(l.x<cutoff){Mz+=l.M; parts.push({t:"M",x:l.x,M:l.M});}
+    }
+  });
+  return {Fx,Fy,Mz,parts};
+}
+function coeff(u,supports,eq,hinges){
+  const xs=supports[u.sup].x;
+  if(eq===0) return u.comp==="H"?1:0;          // ΣFx
+  if(eq===1) return u.comp==="V"?1:0;          // ΣFy
+  if(eq===2){ if(u.comp==="V")return xs; if(u.comp==="M")return 1; return 0; } // ΣM o x=0
+  const xh=hinges[eq-3];                         // warunek przegubu (lewa strona)
+  if(xs<xh){ if(u.comp==="V")return xs-xh; if(u.comp==="M")return 1; }
+  return 0;
+}
+function solveLin(A,b){ // eliminacja Gaussa, n dowolne
+  const n=b.length; const M=A.map((r,i)=>r.concat(b[i]));
+  for(let c=0;c<n;c++){
+    let piv=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[piv][c])) piv=r;
+    if(Math.abs(M[piv][c])<1e-9) return null;
+    [M[c],M[piv]]=[M[piv],M[c]];
+    for(let r=0;r<n;r++){ if(r===c)continue; const f=M[r][c]/M[c][c]; for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; }
+  }
+  return M.map((row,i)=>row[n]/row[i]);  // po Gauss-Jordan macierz jest diagonalna
+}
+
+/* ===== siły wewnętrzne (lewa część, pozycje < x) ===== */
+function internal(x,m,unknowns){
+  let N=0,T=0,Mm=0;
+  unknowns.forEach(u=>{
+    const xs=m.supports[u.sup].x;
+    if(xs<x){
+      if(u.comp==="V"){T+=u.val; Mm+=u.val*(x-xs);}
+      else if(u.comp==="H"){N+=-u.val;}
+      else if(u.comp==="M"){Mm+=-u.val;}
+    }
+  });
+  m.loads.forEach(l=>{
+    if(l.kind==="P"){ if(l.x<x){T+=l.Py; Mm+=l.Py*(x-l.x); N+=-l.Px;} }
+    else if(l.kind==="q"){ const a=l.x1,b=Math.min(l.x2,x); if(b>a){const R=l.w*(b-a),c=(a+b)/2; T+=R; Mm+=R*(x-c);} }
+    else { if(l.x<x) Mm+=-l.M; }
+  });
+  return {N,T,M:Mm};
+}
+
+/* ===== główne obliczenie ===== */
+let lastSolved=null;
+function compute(){
+  const m=readModel(); const out=$("out"); out.innerHTML=""; lastSolved=null;
+  const errs=[];
+  if(!isFinite(m.L)||m.L<=0) errs.push("Podaj dodatnią długość belki L.");
+  if(m.supports.length===0) errs.push("Dodaj co najmniej jedną podporę.");
+  m.supports.forEach((s,i)=>{ if(!isFinite(s.x)||s.x<-1e-9||s.x>m.L+1e-9) errs.push("Podpora "+letter(i)+" leży poza belką [0, "+fmt(m.L)+"]."); });
+  m.hinges.forEach((h,i)=>{ if(h<-1e-9||h>m.L+1e-9) errs.push("Przegub "+(i+1)+" leży poza belką."); });
+  if(errs.length){ showErr("Sprawdź dane wejściowe",errs); draw(m,null); return; }
+
+  const unknowns=buildUnknowns(m.supports);
+  const need=3+m.hinges.length;
+  if(unknowns.length!==need){
+    const diag=unknowns.length<need? "Układ jest <b>geometrycznie zmienny (mechanizm)</b> — za mało więzów."
+      : "Układ jest <b>statycznie niewyznaczalny (przesztywniony)</b> — za dużo więzów; wymaga metod uwzględniających odkształcenia.";
+    showErr("Belka nie jest statycznie wyznaczalna",[
+      "Liczba niewiadomych reakcji = <b>"+unknowns.length+"</b>, a powinna wynosić <b>3 + liczba przegubów = "+need+"</b>.",diag]);
+    draw(m,null); return;
+  }
+  const hingesSorted=[...m.hinges].sort((a,b)=>a-b);
+  const A=[]; const b=[];
+  for(let eq=0;eq<need;eq++) A.push(unknowns.map(u=>coeff(u,m.supports,eq,hingesSorted)));
+  const gl=loadAgg(m.loads,0,Infinity);
+  b.push(-gl.Fx,-gl.Fy,-gl.Mz);
+  hingesSorted.forEach(xh=>{ b.push(-loadAgg(m.loads,xh,xh).Mz); });
+  const sol=solveLin(A,b);
+  if(!sol){ showErr("Układ geometrycznie niestabilny",["Równania równowagi są osobliwe (wyznacznik = 0) — przy tym układzie podpór/przegubów reakcji nie da się jednoznacznie wyznaczyć."]); draw(m,null); return; }
+  unknowns.forEach((u,i)=>u.val=sol[i]);
+  m._hingesSorted=hingesSorted;
+  lastSolved={m,unknowns};
+  renderResults(m,unknowns,gl);
+  draw(m,unknowns);
+}
+function showErr(t,lines){ $("out").innerHTML='<div class="err"><b>'+t+'.</b><ul style="margin:6px 0 0;padding-left:20px">'+lines.map(l=>'<li>'+l+'</li>').join('')+'</ul></div>'; }
+
+/* ===== zbiór punktów charakterystycznych ===== */
+function critPoints(m){
+  const s=new Set([0,m.L]);
+  m.supports.forEach(su=>s.add(su.x));
+  m.hinges.forEach(h=>s.add(h));
+  m.loads.forEach(l=>{ if(l.kind==="P"||l.kind==="M")s.add(l.x); else {s.add(l.x1);s.add(l.x2);} });
+  return [...s].filter(x=>x>=-1e-9&&x<=m.L+1e-9).sort((a,b)=>a-b);
+}
+
+/* ===== pomocnicze do „toku obliczeń" ===== */
+function nterm(v){ return (v<0?" − ":" + ")+fmt(Math.abs(v)); }            // składnik liczbowy ze znakiem
+function joinTerms(arr){ let s=arr.join(""); s=s.replace(/^\s*\+\s*/,""); s=s.replace(/^\s*−\s*/,"−"); return s.trim()||"0"; }
+
+// wyprowadzenie N,T,M dla jednego przekroju [a,b] — styl „na kartce"
+function sectionBlock(m,unknowns,idx,a,b){
+  const mid=(a+b)/2, div=document.createElement("div"); div.className="formula";
+  let h='<span class="step">// Przekrój '+idx+':  '+fmt(a)+' ≤ x ≤ '+fmt(b)+' m  (równowaga lewej części belki)</span>';
+  const Vr=[],Hr=[],Mr=[],Pp=[],Qq=[],Me=[];
+  unknowns.forEach(u=>{ const xs=m.supports[u.sup].x; if(xs<mid){ if(u.comp==="V")Vr.push({xs,val:u.val,lab:letter(u.sup)}); else if(u.comp==="H")Hr.push({val:u.val,lab:letter(u.sup)}); else if(u.comp==="M")Mr.push({val:u.val,lab:letter(u.sup)}); } });
+  m.loads.forEach(l=>{ if(l.kind==="P"&&l.x<mid)Pp.push(l); else if(l.kind==="M"&&l.x<mid)Me.push(l); else if(l.kind==="q"&&l.x1<mid)Qq.push(Object.assign({},l,{spanning:l.x2>mid})); });
+  // N
+  let nt=[]; Hr.forEach(r=>nt.push(nterm(-r.val))); Pp.forEach(p=>{ if(Math.abs(p.Px)>1e-9)nt.push(nterm(-p.Px)); });
+  const Nv=internal(mid,m,unknowns).N;
+  h+='<span class="fl gap"><b>N<sub>'+idx+'</sub></b> = '+(nt.length?joinTerms(nt):"0")+(nt.length?' = <b>'+fmt(Nv)+'</b>':'<b>'+fmt(Nv)+'</b>')+' kN</span>';
+  // T(x)
+  let tt=[]; Vr.forEach(r=>tt.push(nterm(r.val))); Pp.forEach(p=>{ if(Math.abs(p.Py)>1e-9)tt.push(nterm(p.Py)); });
+  Qq.forEach(q=>{ if(q.spanning)tt.push(" + ("+fmt(q.w)+")·(x−"+fmt(q.x1)+")"); else tt.push(nterm(q.w*(q.x2-q.x1))); });
+  h+='<span class="fl gap"><b>T<sub>'+idx+'</sub>(x)</b> = '+joinTerms(tt)+'</span>';
+  h+='<span class="fl">&nbsp;&nbsp;T<sub>'+idx+'</sub>('+fmt(a)+') = <b>'+fmt(internal(a+1e-7,m,unknowns).T)+'</b> kN &nbsp;|&nbsp; T<sub>'+idx+'</sub>('+fmt(b)+') = <b>'+fmt(internal(b-1e-7,m,unknowns).T)+'</b> kN</span>';
+  // M(x)
+  let mt=[]; Vr.forEach(r=>mt.push(" + "+fmt(r.val)+"·(x−"+fmt(r.xs)+")"));
+  Pp.forEach(p=>{ if(Math.abs(p.Py)>1e-9)mt.push(" + ("+fmt(p.Py)+")·(x−"+fmt(p.x)+")"); });
+  Qq.forEach(q=>{ if(q.spanning)mt.push(" + ("+fmt(q.w)+")·(x−"+fmt(q.x1)+")²/2"); else { const c=(q.x1+q.x2)/2; mt.push(" + ("+fmt(q.w)+")·("+fmt(q.x2)+"−"+fmt(q.x1)+")·(x−"+fmt(c)+")"); } });
+  Me.forEach(e=>mt.push(nterm(-e.M)));
+  Mr.forEach(r=>mt.push(" − M<sub>"+r.lab+"</sub>"));
+  h+='<span class="fl gap"><b>M<sub>'+idx+'</sub>(x)</b> = '+joinTerms(mt)+'</span>';
+  h+='<span class="fl">&nbsp;&nbsp;M<sub>'+idx+'</sub>('+fmt(a)+') = <b>'+fmt(internal(a+1e-7,m,unknowns).M)+'</b> kN·m &nbsp;|&nbsp; M<sub>'+idx+'</sub>('+fmt(b)+') = <b>'+fmt(internal(b-1e-7,m,unknowns).M)+'</b> kN·m</span>';
+  div.innerHTML=h; return div;
+}
+
+/* ===== render wyników ===== */
+function renderResults(m,unknowns,gl){
+  const out=$("out");
+  // ---- 1. rozkład obciążeń ----
+  const intro=document.createElement("div"); intro.className="formula";
+  let hi='<span class="step">// Dane — rozkład obciążeń na składowe i wypadkowe</span>';
+  m.loads.forEach(l=>{
+    if(l.kind==="P"){
+      if(l.mode==="polar") hi+='<span class="fl">Siła w x='+fmt(l.x)+' m: P='+fmt(l.P)+' kN, α='+fmt(l.ang)+'° → P<sub>x</sub>=P·cos α='+fmt(l.Px)+' kN, P<sub>y</sub>=P·sin α='+fmt(l.Py)+' kN</span>';
+      else hi+='<span class="fl">Siła skupiona w x='+fmt(l.x)+' m: P<sub>x</sub>='+fmt(l.Px)+' kN, P<sub>y</sub>='+fmt(l.Py)+' kN</span>';
+    } else if(l.kind==="q"){ const R=l.w*(l.x2-l.x1),c=(l.x1+l.x2)/2;
+      hi+='<span class="fl">Obc. ciągłe q='+fmt(l.w)+' kN/m na ['+fmt(l.x1)+', '+fmt(l.x2)+'] m → wypadkowa R=q·(x₂−x₁)='+fmt(R)+' kN w x='+fmt(c)+' m</span>';
+    } else hi+='<span class="fl">Moment skupiony M='+fmt(l.M)+' kN·m w x='+fmt(l.x)+' m</span>';
+  });
+  intro.innerHTML=hi; out.appendChild(intro);
+
+  // ---- 2. równania równowagi ----
+  const eq=document.createElement("div"); eq.className="formula";
+  let h='<span class="step">// Równania równowagi (rzuty na osie + moment względem x=0, dodatni przeciwnie do wskazówek). Niewiadome: reakcje podporowe.</span>';
+  let fx=[]; unknowns.filter(u=>u.comp==="H").forEach(u=>fx.push(" + H<sub>"+letter(u.sup)+"</sub>"));
+  m.loads.forEach(l=>{ if(l.kind==="P"&&Math.abs(l.Px)>1e-9)fx.push(nterm(l.Px)); });
+  h+='<span class="fl gap"><b>ΣF<sub>x</sub> = 0:</b>&nbsp; '+joinTerms(fx)+' = 0</span>';
+  let fy=[]; unknowns.filter(u=>u.comp==="V").forEach(u=>fy.push(" + V<sub>"+letter(u.sup)+"</sub>"));
+  m.loads.forEach(l=>{ if(l.kind==="P"&&Math.abs(l.Py)>1e-9)fy.push(nterm(l.Py)); else if(l.kind==="q")fy.push(nterm(l.w*(l.x2-l.x1))); });
+  h+='<span class="fl"><b>ΣF<sub>y</sub> = 0:</b>&nbsp; '+joinTerms(fy)+' = 0</span>';
+  let mm=[]; unknowns.forEach(u=>{ const xs=m.supports[u.sup].x; if(u.comp==="V")mm.push(" + "+fmt(xs)+"·V<sub>"+letter(u.sup)+"</sub>"); else if(u.comp==="M")mm.push(" + M<sub>"+letter(u.sup)+"</sub>"); });
+  m.loads.forEach(l=>{ if(l.kind==="P"&&Math.abs(l.Py)>1e-9)mm.push(nterm(l.x*l.Py)); else if(l.kind==="q"){const R=l.w*(l.x2-l.x1),c=(l.x1+l.x2)/2; mm.push(nterm(c*R));} else if(l.kind==="M")mm.push(nterm(l.M)); });
+  h+='<span class="fl"><b>ΣM<sub>(x=0)</sub> = 0:</b>&nbsp; '+joinTerms(mm)+' = 0</span>';
+  (m._hingesSorted||[]).forEach(xh=>{
+    let lt=[]; unknowns.forEach(u=>{ const xs=m.supports[u.sup].x; if(xs<xh){ if(u.comp==="V")lt.push(" + ("+fmt(xh)+"−"+fmt(xs)+")·V<sub>"+letter(u.sup)+"</sub>"); else if(u.comp==="M")lt.push(" − M<sub>"+letter(u.sup)+"</sub>"); } });
+    m.loads.forEach(l=>{
+      if(l.kind==="P"&&l.x<xh&&Math.abs(l.Py)>1e-9)lt.push(nterm((xh-l.x)*l.Py));
+      else if(l.kind==="q"&&l.x1<xh){ const b=Math.min(l.x2,xh),R=l.w*(b-l.x1),c=(l.x1+b)/2; lt.push(nterm((xh-c)*R)); }
+      else if(l.kind==="M"&&l.x<xh)lt.push(nterm(-l.M));
+    });
+    h+='<span class="fl gap step">// Warunek przegubu w x='+fmt(xh)+' m: moment zginający M('+fmt(xh)+') = 0</span>';
+    h+='<span class="fl"><b>M('+fmt(xh)+') = 0:</b>&nbsp; '+joinTerms(lt)+' = 0</span>';
+  });
+  h+='<span class="fl gap step">// Rozwiązując powyższy układ równań otrzymujemy reakcje:</span>';
+  eq.innerHTML=h; out.appendChild(eq);
+
+  // ---- reakcje ----
+  const card=document.createElement("div"); card.className="result-const";
+  card.innerHTML='<div class="ttl">REAKCJE PODPOROWE</div>';
+  m.supports.forEach((s,i)=>{
+    const us=unknowns.filter(u=>u.sup===i); if(!us.length)return;
+    const tn=SUP_TYPES.find(t=>t.v===s.type).t.split(" (")[0];
+    const parts=us.map(u=>{
+      if(u.comp==="M"){ const disp=-u.val; return "M<sub>"+letter(i)+"</sub> = <b>"+fmt(disp)+"</b> kN·m <span class='sub'>"+(disp>=0?"⟳ CW":"⟲ CCW")+"</span>"; }
+      const unit="kN", dir=u.comp==="V"?(u.val>=0?"↑":"↓"):(u.val>=0?"→":"←");
+      return u.comp+"<sub>"+letter(i)+"</sub> = <b>"+fmt(u.val)+"</b> "+unit+" <span class='sub'>"+dir+"</span>";
+    });
+    card.innerHTML+='<div class="c">Podpora '+letter(i)+' (x='+fmt(s.x)+' m, '+tn+'):<br>'+parts.join("<br>")+'</div>';
+  });
+  card.innerHTML+='<div class="sub" style="margin-top:6px">Moment utwierdzenia: znak „+" = zgodnie z ruchem wskazówek (jak w typowym zadaniu).</div>';
+  out.appendChild(card);
+
+  // ---- kontrola równowagi ----
+  let rFx=gl.Fx,rFy=gl.Fy,rM=gl.Mz;
+  unknowns.forEach(u=>{ rFx+=coeff(u,m.supports,0,[])*u.val; rFy+=coeff(u,m.supports,1,[])*u.val; rM+=coeff(u,m.supports,2,[])*u.val; });
+  const z=v=>Math.abs(v)<1e-4?0:v;
+  const chk=document.createElement("div"); chk.className="ok-check";
+  chk.innerHTML="✓ Kontrola: ΣF<sub>x</sub>="+fmt(z(rFx))+" kN, ΣF<sub>y</sub>="+fmt(z(rFy))+" kN, ΣM="+fmt(z(rM))+" kN·m.";
+  out.appendChild(chk);
+
+  // ---- oznaczenie przekrojów + wyprowadzenie N,T,M przekrój po przekroju ----
+  // granice przekrojów: podpory, punkty obciążeń i końce q oraz końce belki — BEZ przegubów
+  // (przegub nie zmienia funkcji N/T/M; warunek M=0 w przegubie pokazany przy reakcjach i w tabeli)
+  const segSet=new Set([0,m.L]);
+  m.supports.forEach(s=>segSet.add(s.x));
+  m.loads.forEach(l=>{ if(l.kind==="P"||l.kind==="M")segSet.add(l.x); else {segSet.add(l.x1);segSet.add(l.x2);} });
+  const critS=[...segSet].filter(x=>x>=-1e-9&&x<=m.L+1e-9).sort((a,b)=>a-b);
+  const segs=[]; for(let i=0;i<critS.length-1;i++){ if(critS[i+1]-critS[i]>1e-7) segs.push([critS[i],critS[i+1]]); }
+  const sHead=document.createElement("div"); sHead.className="formula";
+  let sh='<span class="step">// Oznaczenie przekrojów — granice w podporach i punktach zmiany obciążenia (siły, początki/końce q)</span>';
+  segs.forEach((s,i)=> sh+='<span class="fl">Przekrój '+(i+1)+':  '+fmt(s[0])+' ≤ x ≤ '+fmt(s[1])+' m</span>');
+  sHead.innerHTML=sh; out.appendChild(sHead);
+  const sTitle=document.createElement("h2"); sTitle.className="sec"; sTitle.innerHTML='<span class="n">3</span>Siły wewnętrzne — przekrój po przekroju';
+  out.appendChild(sTitle);
+  segs.forEach((s,i)=>{ out.appendChild(sectionSVG(m,unknowns,i+1,s[0],s[1])); out.appendChild(sectionBlock(m,unknowns,i+1,s[0],s[1])); });
+
+  // ---- ekstrema / charakterystyczne ----
+  const crit=critPoints(m);
+  // ekstremum M tam gdzie T zmienia znak (skan gęsty)
+  const Ns=600; let prev=null, extr=[];
+  for(let i=0;i<=Ns;i++){ const x=m.L*i/Ns; const f=internal(x+1e-9,m,unknowns);
+    if(prev && ((prev.T>0&&f.T<0)||(prev.T<0&&f.T>0))){ const t=prev.T/(prev.T-f.T); const xz=prev.x+(x-prev.x)*t; const Mz=internal(xz,m,unknowns).M; extr.push({x:xz,M:Mz}); }
+    prev={x,T:f.T,M:f.M};
+  }
+  // globalne min/max M
+  let Mmin={v:Infinity}, Mmax={v:-Infinity};
+  crit.concat(extr.map(e=>e.x)).forEach(x=>{ [internal(x-1e-7,m,unknowns).M, internal(x+1e-7,m,unknowns).M].forEach(v=>{ if(v<Mmin.v)Mmin={v,x}; if(v>Mmax.v)Mmax={v,x}; }); });
+  const exBox=document.createElement("div"); exBox.className="formula";
+  let eh='<span class="step">// Ekstrema momentu zginającego (M positive = włókna dolne rozciągane)</span>';
+  extr.forEach(e=> eh+='<span class="fl">T=0 przy x = '+fmt(e.x)+' m  →  M = <b>'+fmt(e.M)+'</b> kN·m</span>');
+  eh+='<span class="fl gap">M<sub>max</sub> = <b>'+fmt(Mmax.v)+'</b> kN·m (x='+fmt(Mmax.x)+' m), &nbsp; M<sub>min</sub> = <b>'+fmt(Mmin.v)+'</b> kN·m (x='+fmt(Mmin.x)+' m)</span>';
+  exBox.innerHTML=eh; out.appendChild(exBox);
+
+  // ---- wykresy N,T,M ----
+  const dc=document.createElement("div");
+  dc.innerHTML='<div class="scheme-card"><div class="cap">Siła normalna N(x) [kN]</div><svg id="dN" viewBox="0 0 760 150"></svg></div>'+
+    '<div class="scheme-card"><div class="cap">Siła tnąca T(x) [kN]</div><svg id="dT" viewBox="0 0 760 150"></svg></div>'+
+    '<div class="scheme-card"><div class="cap">Moment zginający M(x) [kN·m] — wykres po stronie włókien rozciąganych</div><svg id="dM" viewBox="0 0 760 170"></svg></div>';
+  out.appendChild(dc);
+  drawDiagram($("dN"),m,unknowns,"N",{color:"#a9772b",fill:"rgba(169,119,43,.18)",invert:false,crit});
+  drawDiagram($("dT"),m,unknowns,"T",{color:"#27632a",fill:"rgba(39,99,42,.16)",invert:false,crit});
+  drawDiagram($("dM"),m,unknowns,"M",{color:"#1f3a93",fill:"rgba(31,58,147,.14)",invert:true,crit,extr});
+
+  // ---- tabela wartości ----
+  const tb=document.createElement("table"); tb.className="vals";
+  let th='<tr><th>x [m]</th><th>N [kN]</th><th>T [kN]</th><th>M [kN·m]</th></tr>';
+  let rows="";
+  crit.forEach(x=>{
+    const lft=internal(x-1e-7,m,unknowns), rgt=internal(x+1e-7,m,unknowns);
+    const jump = Math.abs(lft.T-rgt.T)>1e-3 || Math.abs(lft.M-rgt.M)>1e-3 || Math.abs(lft.N-rgt.N)>1e-3;
+    if(x<=1e-7){ rows+='<tr><td>'+fmt(x)+'</td><td>'+fmt(rgt.N)+'</td><td>'+fmt(rgt.T)+'</td><td>'+fmt(rgt.M)+'</td></tr>'; }
+    else if(x>=m.L-1e-7){ rows+='<tr><td>'+fmt(x)+'</td><td>'+fmt(lft.N)+'</td><td>'+fmt(lft.T)+'</td><td>'+fmt(lft.M)+'</td></tr>'; }
+    else if(jump){ rows+='<tr><td>'+fmt(x)+'⁻</td><td>'+fmt(lft.N)+'</td><td>'+fmt(lft.T)+'</td><td>'+fmt(lft.M)+'</td></tr>'+
+                        '<tr><td>'+fmt(x)+'⁺</td><td>'+fmt(rgt.N)+'</td><td>'+fmt(rgt.T)+'</td><td>'+fmt(rgt.M)+'</td></tr>'; }
+    else rows+='<tr><td>'+fmt(x)+'</td><td>'+fmt(rgt.N)+'</td><td>'+fmt(rgt.T)+'</td><td>'+fmt(rgt.M)+'</td></tr>';
+  });
+  tb.innerHTML=th+rows; out.appendChild(tb);
+
+  $("print_data").textContent="L="+fmt(m.L)+" m · podpory: "+m.supports.map((s,i)=>letter(i)+"@"+fmt(s.x)).join(", ")+(m.hinges.length?" · przeguby: "+m.hinges.map(fmt).join(", "):"");
+}
+
+/* ===== rysunek SVG ===== */
+function el(n,a){const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;}
+function txt(x,y,s,a){const e=el("text",Object.assign({x,y},a||{}));e.textContent=s;return e;}
+function arrow(svg,x1,y1,x2,y2,color,w){
+  w=w||2; svg.appendChild(el("line",{x1,y1,x2,y2,stroke:color,"stroke-width":w}));
+  const an=Math.atan2(y2-y1,x2-x1),hh=8;
+  svg.appendChild(el("polygon",{points:`${x2},${y2} ${x2-hh*Math.cos(an-0.4)},${y2-hh*Math.sin(an-0.4)} ${x2-hh*Math.cos(an+0.4)},${y2-hh*Math.sin(an+0.4)}`,fill:color}));
+}
+function liveDraw(){ draw(readModel(),null); }
+function draw(m,unknowns){
+  const svg=$("scheme"); svg.innerHTML="";
+  const W=760,mL=55,mR=55,yb=110; const L=(isFinite(m.L)&&m.L>0)?m.L:1;
+  const X=x=>mL+(W-mL-mR)*(x/L);
+  svg.appendChild(el("line",{x1:X(0),y1:yb,x2:X(L),y2:yb,stroke:"#16243a","stroke-width":4}));
+  svg.appendChild(el("line",{x1:X(0),y1:yb+44,x2:X(L),y2:yb+44,stroke:"#9aa7b6","stroke-width":1}));
+  svg.appendChild(txt((X(0)+X(L))/2,yb+40,"L = "+fmt(m.L)+" m",{fill:"#5a6b80","font-size":12,"text-anchor":"middle","font-family":"ui-monospace,monospace"}));
+  (m.supports||[]).forEach((s,i)=>{ if(!isFinite(s.x))return; drawSupport(svg,X(s.x),yb,s.type);
+    svg.appendChild(txt(X(s.x),yb+30,letter(i),{fill:"#1f3a93","font-size":13,"text-anchor":"middle","font-weight":"bold","font-family":"ui-monospace,monospace"})); });
+  (m.hinges||[]).forEach(hx=>{ if(!isFinite(hx))return; svg.appendChild(el("circle",{cx:X(hx),cy:yb,r:4.5,fill:"#fff",stroke:"#16243a","stroke-width":2})); });
+  (m.loads||[]).forEach(l=>{ if(l.kind==="P")drawPoint(svg,X,yb,l); else if(l.kind==="q")drawUDL(svg,X,yb,l); else drawMoment(svg,X,yb,l.x,l.M,"#b6312a"); });
+  if(unknowns){
+    unknowns.forEach(u=>{ const s=m.supports[u.sup],x=X(s.x);
+      if(u.comp==="V"){ const up=u.val>=0,ln=40; if(up)arrow(svg,x,yb+ln+8,x,yb+8,"#27632a",2.5); else arrow(svg,x,yb+8,x,yb+ln+8,"#27632a",2.5);
+        svg.appendChild(txt(x-7,yb+44,"V"+letter(u.sup)+"="+fmt(u.val),{fill:"#27632a","font-size":10,"text-anchor":"end","font-family":"ui-monospace,monospace"})); }
+      else if(u.comp==="H"){ const r=u.val>=0,ln=38; if(r)arrow(svg,x-ln,yb,x,yb,"#1f3a93",2.5); else arrow(svg,x+ln,yb,x,yb,"#1f3a93",2.5);
+        svg.appendChild(txt(x,yb-10,"H"+letter(u.sup)+"="+fmt(u.val),{fill:"#1f3a93","font-size":10,"text-anchor":"middle","font-family":"ui-monospace,monospace"})); }
+      else { drawMoment(svg,X,yb,s.x,-u.val,"#1f3a93"); svg.appendChild(txt(x+24,yb-26,"M"+letter(u.sup)+"="+fmt(-u.val),{fill:"#1f3a93","font-size":10,"text-anchor":"start","font-family":"ui-monospace,monospace"})); }
+    });
+  }
+}
+function drawSupport(svg,x,yb,type){
+  const c="#16243a";
+  if(type==="roller"){ svg.appendChild(el("polygon",{points:`${x},${yb} ${x-11},${yb+16} ${x+11},${yb+16}`,fill:"none",stroke:c,"stroke-width":2}));
+    svg.appendChild(el("circle",{cx:x-5,cy:yb+20,r:3,fill:"none",stroke:c,"stroke-width":1.4})); svg.appendChild(el("circle",{cx:x+5,cy:yb+20,r:3,fill:"none",stroke:c,"stroke-width":1.4}));
+    svg.appendChild(el("line",{x1:x-13,y1:yb+24,x2:x+13,y2:yb+24,stroke:c,"stroke-width":1.4})); }
+  else if(type==="pin"){ svg.appendChild(el("polygon",{points:`${x},${yb} ${x-11},${yb+16} ${x+11},${yb+16}`,fill:"none",stroke:c,"stroke-width":2}));
+    svg.appendChild(el("line",{x1:x-13,y1:yb+16,x2:x+13,y2:yb+16,stroke:c,"stroke-width":1.4}));
+    for(let k=-11;k<=9;k+=5) svg.appendChild(el("line",{x1:x+k,y1:yb+16,x2:x+k-5,y2:yb+22,stroke:c,"stroke-width":1})); }
+  else { svg.appendChild(el("line",{x1:x,y1:yb-24,x2:x,y2:yb+24,stroke:c,"stroke-width":3}));
+    const side = x>380?-1:1;
+    for(let k=-22;k<=20;k+=7) svg.appendChild(el("line",{x1:x,y1:yb+k,x2:x+side*9,y2:yb+k+7,stroke:c,"stroke-width":1})); }
+}
+function drawPoint(svg,X,yb,l){
+  const x=X(l.x),Px=l.Px||0,Py=l.Py||0,mag=Math.hypot(Px,Py); if(mag<1e-12)return;
+  const ln=46,ux=Px/mag,uy=-Py/mag,tx=x-ux*ln,ty=yb-uy*ln;
+  arrow(svg,tx,ty,x,yb,"#b6312a",2.5);
+  const lbl="P="+fmt(mag)+(l.mode==="polar"?" (α="+fmt(l.ang)+"°)":"");
+  svg.appendChild(txt(tx+(ux>=0?4:-4),ty-4,lbl,{fill:"#b6312a","font-size":10,"text-anchor":ux>=0?"start":"end","font-family":"ui-monospace,monospace"}));
+}
+function drawUDL(svg,X,yb,l){
+  const x1=X(l.x1),x2=X(l.x2),down=l.w<0,top=yb-30;
+  svg.appendChild(el("line",{x1,y1:top,x2,y2:top,stroke:"#b6312a","stroke-width":2}));
+  const n=Math.max(2,Math.min(10,Math.round((x2-x1)/24)));
+  for(let i=0;i<=n;i++){const xx=x1+(x2-x1)*i/n; if(down)arrow(svg,xx,top,xx,yb-3,"#b6312a",1.3); else arrow(svg,xx,yb-3,xx,top,"#b6312a",1.3);}
+  svg.appendChild(txt((x1+x2)/2,top-5,"q="+fmt(Math.abs(l.w))+" kN/m",{fill:"#b6312a","font-size":10,"text-anchor":"middle","font-family":"ui-monospace,monospace"}));
+}
+function drawMoment(svg,X,yb,x,val,color){
+  const cx=X(x),cy=yb,r=15,ccw=val>=0;
+  const a0=ccw?-0.4:Math.PI+0.4,a1=ccw?Math.PI+0.9:-0.9;
+  const p0x=cx+r*Math.cos(a0),p0y=cy+r*Math.sin(a0),p1x=cx+r*Math.cos(a1),p1y=cy+r*Math.sin(a1);
+  svg.appendChild(el("path",{d:`M ${p0x} ${p0y} A ${r} ${r} 0 1 ${ccw?0:1} ${p1x} ${p1y}`,fill:"none",stroke:color,"stroke-width":2}));
+  const tg=ccw?a1-Math.PI/2:a1+Math.PI/2;
+  svg.appendChild(el("polygon",{points:`${p1x},${p1y} ${p1x+7*Math.cos(tg-0.3)},${p1y+7*Math.sin(tg-0.3)} ${p1x+7*Math.cos(tg+0.3)},${p1y+7*Math.sin(tg+0.3)}`,fill:color}));
+}
+
+/* ===== wycinek graficzny przekroju (diagram ciała swobodnego lewej części) ===== */
+function sectionSVG(m,unknowns,idx,a,b){
+  const xcut=(a+b)/2;
+  const wrap=document.createElement("div"); wrap.className="scheme-card";
+  const cap=document.createElement("div"); cap.className="cap";
+  cap.textContent="Wycinek do przekroju "+idx+" — wydzielona część 0 ≤ x ≤ "+fmt(xcut)+" m z odsłoniętymi siłami N, T, M";
+  wrap.appendChild(cap);
+  const svg=el("svg",{viewBox:"0 0 760 150"}); wrap.appendChild(svg);
+  const W=760,mL=55,mR=60,yb=72,L=(isFinite(m.L)&&m.L>0)?m.L:1;
+  const X=x=>mL+(W-mL-mR)*(x/L); const xc=X(xcut);
+  // prawa (usunięta) część — wyblakła, przerywana
+  svg.appendChild(el("line",{x1:xc,y1:yb,x2:X(L),y2:yb,stroke:"#c9d6e3","stroke-width":3,"stroke-dasharray":"5 4"}));
+  // lewa (analizowana) część — pełna
+  svg.appendChild(el("line",{x1:X(0),y1:yb,x2:xc,y2:yb,stroke:"#16243a","stroke-width":4}));
+  // linia cięcia
+  svg.appendChild(el("line",{x1:xc,y1:yb-36,x2:xc,y2:yb+38,stroke:"#b6312a","stroke-width":1.4,"stroke-dasharray":"4 3"}));
+  svg.appendChild(txt(xc-4,yb-28,"przekrój "+idx,{fill:"#b6312a","font-size":10,"font-style":"italic","text-anchor":"end"}));
+  // podpory na lewej części + reakcje
+  m.supports.forEach((s,i)=>{ if(s.x<=xcut+1e-9){ drawSupport(svg,X(s.x),yb,s.type);
+    svg.appendChild(txt(X(s.x),yb+30,letter(i),{fill:"#1f3a93","font-size":11,"text-anchor":"middle","font-weight":"bold","font-family":"ui-monospace,monospace"})); } });
+  unknowns.forEach(u=>{ const s=m.supports[u.sup]; if(s.x>xcut+1e-9)return; const x=X(s.x);
+    if(u.comp==="V"){ const up=u.val>=0,ln=28; if(up)arrow(svg,x,yb+ln+6,x,yb+6,"#27632a",2); else arrow(svg,x,yb+6,x,yb+ln+6,"#27632a",2);
+      svg.appendChild(txt(x-6,yb+42,"V"+letter(u.sup)+"="+fmt(u.val),{fill:"#27632a","font-size":9,"text-anchor":"end","font-family":"ui-monospace,monospace"})); }
+    else if(u.comp==="H"){ const r=u.val>=0,ln=26; if(r)arrow(svg,x-ln,yb,x,yb,"#1f3a93",2); else arrow(svg,x+ln,yb,x,yb,"#1f3a93",2); }
+    else { drawMoment(svg,X,yb,s.x,-u.val,"#1f3a93"); } });
+  // obciążenia na lewej części (q przycięte do cięcia)
+  m.loads.forEach(l=>{
+    if(l.kind==="P"){ if(l.x<=xcut+1e-9) drawPoint(svg,X,yb,l); }
+    else if(l.kind==="q"){ if(l.x1<xcut){ const cl={kind:"q",x1:l.x1,x2:Math.min(l.x2,xcut),w:l.w}; if(cl.x2>cl.x1+1e-9) drawUDL(svg,X,yb,cl); } }
+    else { if(l.x<=xcut+1e-9) drawMoment(svg,X,yb,l.x,l.M,"#b6312a"); }
+  });
+  // odsłonięte siły wewnętrzne w przekroju
+  const fI=internal(xcut,m,unknowns);
+  if(Math.abs(fI.N)>5e-4){ const nx=xc+(fI.N>=0?30:-30); arrow(svg,xc,yb,nx,yb,"#a9772b",2);
+    svg.appendChild(txt(nx,yb-6,"N="+fmt(fI.N),{fill:"#a9772b","font-size":9.5,"text-anchor":"middle","font-family":"ui-monospace,monospace"})); }
+  if(Math.abs(fI.T)>5e-4){ const ty=yb+(fI.T>=0?30:-30); arrow(svg,xc,yb,xc,ty,"#27632a",2);
+    svg.appendChild(txt(xc+22,ty,"T="+fmt(fI.T),{fill:"#27632a","font-size":9.5,"text-anchor":"start","font-family":"ui-monospace,monospace"})); }
+  if(Math.abs(fI.M)>5e-4){ drawMoment(svg,X,yb,xcut,fI.M,"#1f3a93");
+    svg.appendChild(txt(xc+20,yb-20,"M="+fmt(fI.M),{fill:"#1f3a93","font-size":9.5,"text-anchor":"start","font-family":"ui-monospace,monospace"})); }
+  return wrap;
+}
+
+/* ===== wykresy N/T/M ===== */
+function drawDiagram(svg,m,unknowns,which,opt){
+  const W=760,H=which==="M"?170:150,padL=46,padR=18,padT=20,padB=24,L=m.L||1;
+  const X=x=>padL+(W-padL-padR)*(x/L);
+  // próbki: gęsta siatka + punkty krytyczne ±eps
+  const xs=new Set(); for(let i=0;i<=400;i++)xs.add(L*i/400);
+  opt.crit.forEach(c=>{xs.add(Math.max(0,c-1e-6));xs.add(Math.min(L,c+1e-6));xs.add(c);});
+  const arr=[...xs].filter(x=>x>=0&&x<=L).sort((a,b)=>a-b);
+  const pts=arr.map(x=>({x,v:internal(x,m,unknowns)[which]}));
+  let vmax=1e-9; pts.forEach(p=>vmax=Math.max(vmax,Math.abs(p.v)));
+  const y0=padT+(H-padT-padB)/2, sc=((H-padT-padB)/2-6)/vmax, sgn=opt.invert?-1:1;
+  const Y=v=>y0-sgn*v*sc;
+  // oś
+  svg.appendChild(el("line",{x1:padL,y1:y0,x2:W-padR,y2:y0,stroke:"#16243a","stroke-width":1.2}));
+  // wypełnienie + linia
+  let dF="M "+X(pts[0].x)+" "+Y(0); pts.forEach(p=>dF+=" L "+X(p.x)+" "+Y(p.v)); dF+=" L "+X(pts[pts.length-1].x)+" "+Y(0)+" Z";
+  svg.appendChild(el("path",{d:dF,fill:opt.fill,stroke:"none"}));
+  let dL="M "+X(pts[0].x)+" "+Y(pts[0].v); pts.forEach(p=>dL+=" L "+X(p.x)+" "+Y(p.v));
+  svg.appendChild(el("path",{d:dL,fill:"none",stroke:opt.color,"stroke-width":1.8}));
+  // znaczniki podpór/przegubów na osi
+  m.supports.forEach((s,i)=>{ svg.appendChild(el("line",{x1:X(s.x),y1:y0-3,x2:X(s.x),y2:y0+3,stroke:"#16243a","stroke-width":2}));
+    svg.appendChild(txt(X(s.x),H-6,letter(i),{fill:"#5a6b80","font-size":9,"text-anchor":"middle","font-family":"ui-monospace,monospace"})); });
+  m.hinges.forEach(hx=> svg.appendChild(el("circle",{cx:X(hx),cy:y0,r:2.5,fill:"#fff",stroke:"#16243a","stroke-width":1.3})));
+  // adnotacje wartości w punktach charakterystycznych
+  const seen=new Set();
+  opt.crit.forEach(x=>{
+    [{xx:x-1e-7,lim:"⁻"},{xx:x+1e-7,lim:"⁺"}].forEach(o=>{
+      if(o.xx<0||o.xx>L)return; const v=internal(o.xx,m,unknowns)[which];
+      const key=fmt(x)+"|"+fmt(v); if(seen.has(key))return;
+      if(Math.abs(v)<5e-4)return;
+      seen.add(key);
+      svg.appendChild(el("circle",{cx:X(x),cy:Y(v),r:2,fill:opt.color}));
+      svg.appendChild(txt(X(x),Y(v)+(sgn*v>=0?-4:11),fmt(v),{fill:"#16243a","font-size":9.5,"text-anchor":"middle","font-family":"ui-monospace,monospace"}));
+    });
+  });
+  if(which==="M"&&opt.extr){ opt.extr.forEach(e=>{ svg.appendChild(el("circle",{cx:X(e.x),cy:Y(e.M),r:2.4,fill:"#b6312a"}));
+    svg.appendChild(txt(X(e.x),Y(e.M)+(sgn*e.M>=0?-4:11),fmt(e.M),{fill:"#b6312a","font-size":9.5,"text-anchor":"middle","font-family":"ui-monospace,monospace","font-weight":"bold"})); }); }
+}
+
+/* ===== przykłady ===== */
+const EXAMPLES=[
+  { label:"Przykład 1 — belka Gerbera (z belka1.pdf): podpory @1, @3,5, utwierdzenie @10, przeguby @5 i @7",
+    m:{L:10, supports:[{x:1,type:"roller"},{x:3.5,type:"roller"},{x:10,type:"fixed"}], hinges:[5,7],
+       loads:[{kind:"q",x1:0,x2:3.5,w:-8},{kind:"P",mode:"polar",x:6,P:10,ang:-60},{kind:"M",x:8.5,M:-15}]} },
+  { label:"Przykład 2 — wolnopodparta L=6, P=10 kN ↓ w x=3",
+    m:{L:6, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], hinges:[], loads:[{kind:"P",mode:"comp",x:3,Py:-10,Px:0}]} },
+  { label:"Przykład 3 — wolnopodparta L=6, q=5 kN/m ↓ na [0,6]",
+    m:{L:6, supports:[{x:0,type:"pin"},{x:6,type:"roller"}], hinges:[], loads:[{kind:"q",x1:0,x2:6,w:-5}]} },
+  { label:"Przykład 4 — wspornik L=4, utwierdzenie @0, P=8 kN ↓ na końcu",
+    m:{L:4, supports:[{x:0,type:"fixed"}], hinges:[], loads:[{kind:"P",mode:"comp",x:4,Py:-8,Px:0}]} },
+];
+function fillExamples(){ $("exampleList").innerHTML=EXAMPLES.map((e,i)=>'<option value="'+i+'">'+e.label+'</option>').join(''); }
+function loadExample(i){ const e=EXAMPLES[i]; if(!e)return; $("exampleList").value=String(i); setModel(JSON.parse(JSON.stringify(e.m))); compute(); }
+
+/* ===== start ===== */
+fillExamples();
+$("addSupport").addEventListener("click",()=>{$("supports").appendChild(supportRow());liveDraw();});
+$("addHinge").addEventListener("click",()=>{$("hinges").appendChild(hingeRow());liveDraw();});
+$("addLoad").addEventListener("click",()=>{$("loads").appendChild(loadRow());liveDraw();});
+$("go").addEventListener("click",compute);
+$("loadExample").addEventListener("click",()=>loadExample(parseInt($("exampleList").value,10)||0));
+$("L").addEventListener("input",liveDraw);
+loadExample(0);
+</script>
+</body>
+</html>

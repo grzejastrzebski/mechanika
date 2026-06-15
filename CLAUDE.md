@@ -29,6 +29,11 @@ logowania, bez wysyłania danych. Interfejs w języku polskim.
   schemat belki w SVG, 6 wbudowanych przykładów). **Vanilla JS + SVG**, bez zależności.
   **Strona ukryta:** celowo poza `TABS` — brak zakładki i kafelka; dostępna wyłącznie
   pod bezpośrednim adresem `/reakcje.html`.
+- `belki.html` — analizator belek płaskich statycznie wyznaczalnych, w tym **belek
+  Gerbera z przegubami wewnętrznymi**: reakcje (3 równania równowagi + warunek M=0 na
+  każdy przegub), siła normalna N(x), tnąca T(x) i moment zginający M(x) — wykresy SVG,
+  wartości charakterystyczne i ekstrema momentu. Siły skupione ukośne (składowe lub
+  P+kąt). **Vanilla JS + SVG**, bez zależności. Zwalidowany na przykładzie z `belka1.pdf`.
 
 ## Mapa kalkulatorów (status w `index.html` → `TABS`)
 
@@ -40,8 +45,8 @@ gdy kalkulator jest gotowy. Gotowe definicje tych wpisów są w historii gita.
 |----------------|----------|-----------------------|
 | Ruszty         | `ready`  | `solver-rusztow.html` |
 | Płyty okrągłe  | `ready`  | `plyty-okragle.html`  |
+| Belki          | `ready`  | `belki.html`          |
 | Reakcje        | ukryty (poza `TABS`, tylko `/reakcje.html`) | `reakcje.html` |
-| Belki          | planowane (poza `TABS`) | —      |
 | Ramy           | planowane (poza `TABS`) | —      |
 | Przesunięcia   | planowane (poza `TABS`) | —      |
 

@@ -240,12 +240,15 @@ const TABS = [
   { id:"plyty",       label:"Płyty okrągłe",  status:"ready", type:"iframe", src:"plyty-okragle.html",
     title:"Płyty okrągłe",
     desc:"Zginanie osiowo-symetrycznych płyt kołowych i pierścieniowych: ugięcia, momenty i siły poprzeczne, krok po kroku, z wykresami." },
-  { id:"belki",       label:"Belki",          status:"ready", type:"iframe", src:"belki.html",
-    title:"Analizator belek (N, T, M)",
-    desc:"Belki płaskie statycznie wyznaczalne, także belki Gerbera z przegubami: reakcje, siła normalna, tnąca i moment zginający z wykresami i ekstremami." },
+  // belki.html — analizator belek (N, T, M) jest CHWILOWO poza TABS: zdeployowany
+  // i działający, dostępny pod bezpośrednim adresem /belki.html, ale bez zakładki
+  // ani kafelka na stronie głównej. Wpis do przywrócenia, gdy zdecydujemy się
+  // pokazać moduł — gotowa definicja jest w historii gita:
+  //   { id:"belki", label:"Belki", status:"ready", type:"iframe", src:"belki.html",
+  //     title:"Analizator belek (N, T, M)", desc:"Belki płaskie statycznie wyznaczalne..." }
   // reakcje.html — kalkulator reakcji belek jest CELOWO poza TABS: zdeployowany
   // jako samodzielna strona, dostępny tylko pod bezpośrednim adresem /reakcje.html,
-  // bez zakładki ani kafelka. Kolejne moduły (Belki, Ramy, Przesunięcia) dodajemy
+  // bez zakładki ani kafelka. Kolejne moduły (Ramy, Przesunięcia) dodajemy
   // pojedynczo później — patrz historia gita po gotowe wpisy „soon".
 ];
 

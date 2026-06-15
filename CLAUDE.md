@@ -34,6 +34,8 @@ logowania, bez wysyłania danych. Interfejs w języku polskim.
   każdy przegub), siła normalna N(x), tnąca T(x) i moment zginający M(x) — wykresy SVG,
   wartości charakterystyczne i ekstrema momentu. Siły skupione ukośne (składowe lub
   P+kąt). **Vanilla JS + SVG**, bez zależności. Zwalidowany na przykładzie z `belka1.pdf`.
+  **Strona chwilowo ukryta:** celowo poza `TABS` — brak zakładki i kafelka; dostępna
+  wyłącznie pod bezpośrednim adresem `/belki.html`. Do pokazania, gdy zdecydujemy.
 
 ## Mapa kalkulatorów (status w `index.html` → `TABS`)
 
@@ -45,7 +47,7 @@ gdy kalkulator jest gotowy. Gotowe definicje tych wpisów są w historii gita.
 |----------------|----------|-----------------------|
 | Ruszty         | `ready`  | `solver-rusztow.html` |
 | Płyty okrągłe  | `ready`  | `plyty-okragle.html`  |
-| Belki          | `ready`  | `belki.html`          |
+| Belki          | ukryty (poza `TABS`, tylko `/belki.html`) | `belki.html` |
 | Reakcje        | ukryty (poza `TABS`, tylko `/reakcje.html`) | `reakcje.html` |
 | Ramy           | planowane (poza `TABS`) | —      |
 | Przesunięcia   | planowane (poza `TABS`) | —      |

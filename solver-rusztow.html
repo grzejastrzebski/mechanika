@@ -1374,6 +1374,16 @@ function App() {
   }, [nodes, elements, supports, statesData]);
 
   const handleAutoFill = useCallback(() => {
+    // 1. Zwolnij WSZYSTKIE n więzów w podporach (układ podstawowy)
+    setSupports(prev => {
+      const updated = prev.map(sup => ({...sup}));
+      basicSystem.forEach(rel => {
+        const idx = updated.findIndex(s => s.node === rel.node);
+        if (idx !== -1) updated[idx] = {...updated[idx], [rel.dof]: false};
+      });
+      return updated.filter(s => s.z || s.rx || s.ry);
+    });
+    // 2. Wpisz obciążenia jednostkowe do Stan 1 i Stan 2 (limit interfejsu: max 2)
     setStatesData(prev => prev.map((s, i) => {
       if (i === 0 || !basicSystem[i - 1]) return s;
       const rel = basicSystem[i - 1];
@@ -1733,9 +1743,9 @@ function App() {
                 onClick={handleAutoFill}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 ring-1 ring-amber-600/40 transition-colors"
               >
-                ⚡ Uzupełnij stany automatycznie
+                ⚡ Zastosuj układ podstawowy i wpisz stany
               </button>
-              <span className="text-[11px] text-slate-500">potem kliknij <span className="text-cyan-400 font-semibold">▶ Oblicz</span> ponownie</span>
+              <span className="text-[11px] text-slate-500">zwolni więzy w podporach + wpisze obciążenia jednostkowe — potem kliknij <span className="text-cyan-400 font-semibold">▶ Oblicz</span></span>
             </div>
           </div>
         )}

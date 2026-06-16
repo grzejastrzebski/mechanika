@@ -7,6 +7,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>Babel.registerPreset('react-classic',{presets:[[Babel.availablePresets['react'],{runtime:'classic'}]]});</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   // Jasny motyw "papierowy" spójny z kalkulatorem płyt okrągłych.
@@ -81,7 +82,7 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" data-presets="react">
+<script type="text/babel" data-presets="react-classic">
 const { useState, useCallback, useRef, useEffect, useMemo, Fragment } = React;
 
 /* ============================================================
@@ -529,6 +530,76 @@ function proposeBasicSystem(supports, n) {
   return releases;
 }
 
+// Wszystkie aktywne więzy jako płaska lista [{node, dof, label, constraint}, …]
+function getAllConstraints(supports) {
+  const items = [];
+  for (const sup of supports) {
+    if (sup.ry) items.push({node:sup.node, dof:'ry', label:`My w ${sup.node}`, constraint:`obrót θy w węźle ${sup.node}`});
+    if (sup.rx) items.push({node:sup.node, dof:'rx', label:`Mx w ${sup.node}`, constraint:`obrót θx w węźle ${sup.node}`});
+    if (sup.z)  items.push({node:sup.node, dof:'z',  label:`Rz w ${sup.node}`, constraint:`ugięcie w w węźle ${sup.node}`});
+  }
+  return items;
+}
+
+// Wszystkie k-elementowe podzbiory tablicy arr
+function enumerateCombinations(arr, k) {
+  if (k === 0) return [[]];
+  if (k > arr.length) return [];
+  const [first, ...rest] = arr;
+  return [
+    ...enumerateCombinations(rest, k - 1).map(c => [first, ...c]),
+    ...enumerateCombinations(rest, k),
+  ];
+}
+
+// Sprawdza geometryczną niezmienność układu podstawowego (po zwolnieniu więzów).
+// Warunki równowagi rusztu w płaszczyźnie xy: ΣFz, ΣMx, ΣMy muszą być bilansowalne.
+function isGeometricallyStable(remainingSupports, nodes) {
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+  let hasZ = false, hasRx = false, hasRy = false;
+  const zPts = [];
+  for (const sup of remainingSupports) {
+    const nd = nodeMap[sup.node]; if (!nd) continue;
+    const x = parseFloat(nd.x)||0, y = parseFloat(nd.y)||0;
+    if (sup.z)  { hasZ = true; zPts.push({x, y}); }
+    if (sup.rx) hasRx = true;
+    if (sup.ry) hasRy = true;
+  }
+  if (!hasZ) return false;
+  const ys = new Set(zPts.map(p => Math.round(p.y * 1e6)));
+  const xs = new Set(zPts.map(p => Math.round(p.x * 1e6)));
+  if (!hasRx && ys.size < 2) return false;
+  if (!hasRy && xs.size < 2) return false;
+  return true;
+}
+
+// Enumeruje wszystkie geometrycznie niezmienne układy podstawowe dla n zwolnień.
+// Zwraca {valid: [{removed:[…], remaining:[…]}, …], total: N}
+function enumerateBasicSystems(supports, nodes, n) {
+  if (n <= 0) return {valid: [], total: 0};
+  const allCons = getAllConstraints(supports);
+  const allCombos = enumerateCombinations(allCons, n);
+  const valid = [];
+  for (const combo of allCombos) {
+    const modified = supports.map(s => ({...s}));
+    combo.forEach(rc => {
+      const idx = modified.findIndex(s => s.node === rc.node);
+      if (idx !== -1) modified[idx] = {...modified[idx], [rc.dof]: false};
+    });
+    const remaining = modified.filter(s => s.z || s.rx || s.ry);
+    if (isGeometricallyStable(remaining, nodes)) {
+      const removed = combo.map((rc, i) => ({
+        ...rc,
+        xi: 'X' + (XI_SUB[i] || (i+1)),
+        stateIdx: i + 1,
+      }));
+      valid.push({removed, remaining});
+    }
+  }
+  return {valid, total: allCombos.length};
+}
+
 const EXAMPLES = {
   zadanie: {
     name: 'Twoje zadanie (ruszt z przegubem)',
@@ -587,6 +658,44 @@ const EXAMPLES = {
     loads: [{node:'C', Fz:-20, Mx:0, My:0}],
   },
 };
+
+// Rdzeń obliczeniowy — czysta funkcja, nie dotyka stanu React.
+// options.method: 'wereshchagin' (domyślnie) | 'mohr' (Faza 2 — do wpięcia tutaj)
+function computeAll(nodes, elements, supports, statesData, options = {}) {
+  const stateHasData = (idx) =>
+    statesData[idx].loads.some(l =>
+      Math.abs(parseFloat(l.Fz)||0)+Math.abs(parseFloat(l.Mx)||0)+Math.abs(parseFloat(l.My)||0) > 1e-12)
+    || elements.some(el => Math.abs(parseFloat(statesData[idx].elementQ?.[el.id])||0) > 1e-12);
+  const elsForState = (idx) => elements.map(el => ({...el, q: parseFloat(statesData[idx].elementQ?.[el.id]) || 0}));
+  const r0 = solveGrillage(nodes, elsForState(0), supports, statesData[0].loads);
+  const has1 = stateHasData(1), has2 = stateHasData(2);
+  let r1=null, r2=null, deltas=null, finalForces=null;
+  if (has1) {
+    r1 = solveGrillage(nodes, elsForState(1), supports, statesData[1].loads);
+    if (has2) {
+      r2 = solveGrillage(nodes, elsForState(2), supports, statesData[2].loads);
+      deltas = computeWereshchagin(r0.elementForces, r1.elementForces, r2.elementForces, elements);
+    } else {
+      deltas = computeWereshchagin(r0.elementForces, r1.elementForces, null, elements);
+    }
+    const X1 = deltas.X1, X2 = deltas.X2 || 0;
+    finalForces = r0.elementForces.map((ef0, i) => {
+      const ef1 = r1.elementForces[i];
+      const ef2 = has2 ? r2.elementForces[i] : null;
+      const add2 = (k) => has2 ? X2 * (ef2[k]||0) : 0;
+      return {
+        el: ef0.el, L: ef0.L,
+        q: (ef0.q||0) + X1*(ef1.q||0) + (has2 ? X2*(ef2.q||0) : 0),
+        V1: ef0.V1+X1*ef1.V1+add2('V1'), Ms1: ef0.Ms1+X1*ef1.Ms1+add2('Ms1'), Mz1: ef0.Mz1+X1*ef1.Mz1+add2('Mz1'),
+        V2: ef0.V2+X1*ef1.V2+add2('V2'), Ms2: ef0.Ms2+X1*ef1.Ms2+add2('Ms2'), Mz2: ef0.Mz2+X1*ef1.Mz2+add2('Mz2'),
+        Mint_left: ef0.Mint_left+X1*ef1.Mint_left+add2('Mint_left'),
+        Mint_right: ef0.Mint_right+X1*ef1.Mint_right+add2('Mint_right'),
+        Tint: ef0.Tint+X1*ef1.Tint+add2('Tint'),
+      };
+    });
+  }
+  return {state0: r0, state1: r1, state2: r2, deltas, finalForces};
+}
 
 const fmt = (x, d=2) => {
   if (x === null || x === undefined || isNaN(x)) return '—';
@@ -1211,6 +1320,103 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
   );
 }
 
+function Stepper({stage, onBack}) {
+  const steps = ['Schemat', 'Stany', 'Obliczenia'];
+  return (
+    <div className="flex items-center">
+      {steps.map((name, i) => {
+        const s = i + 1;
+        const done = stage > s, active = stage === s, future = stage < s;
+        return (
+          <React.Fragment key={s}>
+            <button
+              onClick={() => done && onBack(s)}
+              disabled={!done}
+              title={done ? `Wróć do etapu ${s}` : undefined}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors
+                ${active ? 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/40' :
+                  done ? 'text-emerald-400 hover:bg-emerald-950/40 cursor-pointer' :
+                  'text-slate-500 cursor-default'}`}
+            >
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0
+                ${active ? 'bg-cyan-500/30 ring-1 ring-cyan-500 text-cyan-200' :
+                  done ? 'bg-emerald-500/20 ring-1 ring-emerald-600 text-emerald-300' :
+                  'bg-slate-800 text-slate-500'}`}>
+                {done ? '✓' : s}
+              </span>
+              {name}
+            </button>
+            {i < 2 && <div className={`w-5 h-px mx-0.5 ${done ? 'bg-emerald-700' : stage > i ? 'bg-slate-600' : 'bg-slate-800'}`}/>}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=130, height=85}) {
+  if (!nodes.length) return null;
+  const pad = 16;
+  const xs = nodes.map(n => parseFloat(n.x)||0), ys = nodes.map(n => parseFloat(n.y)||0);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs), ymin=Math.min(...ys), ymax=Math.max(...ys);
+  const dx=(xmax-xmin)||1, dy=(ymax-ymin)||1;
+  const sc = Math.min((width-2*pad)/dx, (height-2*pad)/dy);
+  const tx = x => width/2 + sc*(x-(xmin+xmax)/2);
+  const ty = y => height/2 - sc*(y-(ymin+ymax)/2);
+  const supMap = {};
+  supports.forEach(s => { supMap[s.node] = s; });
+  const removedSet = new Set(removedConstraints.map(r => `${r.node}:${r.dof}`));
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
+         style={{background:'#f7f5ed', borderRadius:'4px', border:'1px solid #c9d6e3'}}>
+      {elements.map((el, i) => {
+        const n1=nodes.find(n=>n.id===el.n1), n2=nodes.find(n=>n.id===el.n2);
+        if (!n1||!n2) return null;
+        return <line key={`e${i}`} x1={tx(parseFloat(n1.x))} y1={ty(parseFloat(n1.y))} x2={tx(parseFloat(n2.x))} y2={ty(parseFloat(n2.y))} stroke="#16243a" strokeWidth="1.5"/>;
+      })}
+      {nodes.map(node => {
+        const sup = supMap[node.id];
+        const px = tx(parseFloat(node.x)||0), py = ty(parseFloat(node.y)||0);
+        if (sup) {
+          const isFullFixed = (sup.z && !removedSet.has(`${node.id}:z`)) &&
+                              (sup.rx && !removedSet.has(`${node.id}:rx`)) &&
+                              (sup.ry && !removedSet.has(`${node.id}:ry`));
+          const anyRemoved = ['z','rx','ry'].some(d => sup[d] && removedSet.has(`${node.id}:${d}`));
+          if (isFullFixed) {
+            return (
+              <g key={`n${node.id}`}>
+                <rect x={px-7} y={py-7} width="14" height="14" fill="#e8edf4" stroke="#5a6b80" strokeWidth="1"/>
+                <circle cx={px} cy={py} r="3" fill="#fff" stroke="#0891b2" strokeWidth="1"/>
+                <text x={px+8} y={py-6} fontSize="7" fill="#0891b2" fontFamily="monospace" fontWeight="bold">{node.id}</text>
+              </g>
+            );
+          }
+          return (
+            <g key={`n${node.id}`}>
+              {anyRemoved && <circle cx={px} cy={py} r="9" fill="none" stroke="#e11d48" strokeWidth="1.2" strokeDasharray="2.5,1.5" opacity="0.8"/>}
+              <circle cx={px} cy={py} r="5" fill="none" stroke="#5a6b80" strokeWidth="1"/>
+              <circle cx={px} cy={py} r="3" fill="#fff" stroke="#0891b2" strokeWidth="1"/>
+              <text x={px+7} y={py-5} fontSize="7" fill="#0891b2" fontFamily="monospace" fontWeight="bold">{node.id}</text>
+            </g>
+          );
+        }
+        return (
+          <g key={`n${node.id}`}>
+            <circle cx={px} cy={py} r="3" fill="#fff" stroke="#0891b2" strokeWidth="1"/>
+            <text x={px+5} y={py-4} fontSize="7" fill="#0891b2" fontFamily="monospace" fontWeight="bold">{node.id}</text>
+          </g>
+        );
+      })}
+      {removedConstraints.map((rc, i) => {
+        const nd = nodes.find(n => n.id===rc.node); if (!nd) return null;
+        const px = tx(parseFloat(nd.x)||0), py = ty(parseFloat(nd.y)||0);
+        const colors = ['#7c3aed','#db2777','#d97706'];
+        return <text key={`xi${i}`} x={px+10} y={py+8+i*9} fontSize="8" fill={colors[i]||'#e11d48'} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>;
+      })}
+    </svg>
+  );
+}
+
 function App() {
   const [nodes, setNodes] = useState(EXAMPLES.zadanie.nodes);
   const [elements, setElements] = useState(EXAMPLES.zadanie.elements.map(el => { const {q, ...rest} = el; return rest; }));
@@ -1269,6 +1475,11 @@ function App() {
 
   const staticInfo = useMemo(() => computeStaticDegree(nodes, elements, supports), [nodes, elements, supports]);
   const basicSystem = useMemo(() => staticInfo ? proposeBasicSystem(supports, staticInfo.n) : [], [supports, staticInfo]);
+
+  // Przepływ etapowy
+  const [appStage, setAppStage] = useState(1);
+  const [basicSystemOptions, setBSOptions] = useState([]);
+  const [selectedOption, setSelectedOption] = useState(null);
 
   // Wybór jednostek symbolicznych dla różnych typów wyników
   // Sufiks symboliczny dla wartości danego typu (kind) w danym stanie (stateIdx).
@@ -1329,49 +1540,64 @@ function App() {
   const calculate = useCallback(() => {
     try {
       setError(null);
-      const stateHasData = (idx) =>
-        statesData[idx].loads.some(l => Math.abs(parseFloat(l.Fz)||0)+Math.abs(parseFloat(l.Mx)||0)+Math.abs(parseFloat(l.My)||0) > 1e-12)
-        || elements.some(el => Math.abs(parseFloat(statesData[idx].elementQ[el.id])||0) > 1e-12);
-      const elsForState = (idx) => elements.map(el => ({...el, q: parseFloat(statesData[idx].elementQ[el.id]) || 0}));
-
-      const r0 = solveGrillage(nodes, elsForState(0), supports, statesData[0].loads);
-      const has1 = stateHasData(1);
-      const has2 = stateHasData(2);
-
-      let r1=null, r2=null, deltas=null, finalForces=null;
-      if (has1) {
-        r1 = solveGrillage(nodes, elsForState(1), supports, statesData[1].loads);
-        if (has2) {
-          r2 = solveGrillage(nodes, elsForState(2), supports, statesData[2].loads);
-          deltas = computeWereshchagin(r0.elementForces, r1.elementForces, r2.elementForces, elements);
-        } else {
-          deltas = computeWereshchagin(r0.elementForces, r1.elementForces, null, elements);
-        }
-        // Wykres końcowy: M = M0 + X1*M1 (+ X2*M2 jeśli has2)
-        const X1 = deltas.X1, X2 = deltas.X2 || 0;
-        finalForces = r0.elementForces.map((ef0, i) => {
-          const ef1 = r1.elementForces[i];
-          const ef2 = has2 ? r2.elementForces[i] : null;
-          const add2 = (k) => has2 ? X2 * (ef2[k]||0) : 0;
-          return {
-            el: ef0.el, L: ef0.L,
-            q: (ef0.q||0) + X1*(ef1.q||0) + (has2 ? X2*(ef2.q||0) : 0),
-            V1: ef0.V1 + X1*ef1.V1 + add2('V1'),
-            Ms1: ef0.Ms1 + X1*ef1.Ms1 + add2('Ms1'),
-            Mz1: ef0.Mz1 + X1*ef1.Mz1 + add2('Mz1'),
-            V2: ef0.V2 + X1*ef1.V2 + add2('V2'),
-            Ms2: ef0.Ms2 + X1*ef1.Ms2 + add2('Ms2'),
-            Mz2: ef0.Mz2 + X1*ef1.Mz2 + add2('Mz2'),
-            Mint_left: ef0.Mint_left + X1*ef1.Mint_left + add2('Mint_left'),
-            Mint_right: ef0.Mint_right + X1*ef1.Mint_right + add2('Mint_right'),
-            Tint: ef0.Tint + X1*ef1.Tint + add2('Tint'),
-          };
-        });
-      }
-      setResults({ state0: r0, state1: r1, state2: r2, deltas, finalForces });
-      setViewMode('mz');
+      const res = computeAll(nodes, elements, supports, statesData);
+      setResults(res); setViewMode('mz');
     } catch (e) { setError(e.message); setResults(null); }
   }, [nodes, elements, supports, statesData]);
+
+  const goToStage2 = useCallback(() => {
+    setError(null);
+    if (!nodes.length || !elements.length) { setError('Dodaj węzły i pręty przed przejściem dalej.'); return; }
+    const info = computeStaticDegree(nodes, elements, supports);
+    if (!info) { setError('Nie można obliczyć stopnia niewyznaczalności.'); return; }
+    if (info.n < 0) { setError(`Układ geometrycznie zmienny (n = ${info.n}). Sprawdź geometrię i podpory.`); return; }
+    if (info.n === 0) {
+      try {
+        const res = computeAll(nodes, elements, supports, statesData);
+        setResults(res); setViewMode('mz'); setAppStage(3);
+      } catch (e) { setError(e.message); }
+      return;
+    }
+    const {valid, total} = enumerateBasicSystems(supports, nodes, info.n);
+    if (valid.length === 0) {
+      setError(`Brak geometrycznie niezmiennych układów podstawowych (sprawdzono ${total} kombinacji). Sprawdź podpory.`);
+      return;
+    }
+    setBSOptions(valid); setSelectedOption(0); setAppStage(2);
+  }, [nodes, elements, supports, statesData]);
+
+  const goToStage3 = useCallback(() => {
+    if (selectedOption === null || !basicSystemOptions[selectedOption]) return;
+    setError(null);
+    const combo = basicSystemOptions[selectedOption];
+    const newSupports = supports.map(s => ({...s}));
+    combo.removed.forEach(rc => {
+      const idx = newSupports.findIndex(s => s.node === rc.node);
+      if (idx !== -1) newSupports[idx] = {...newSupports[idx], [rc.dof]: false};
+    });
+    const filteredSupports = newSupports.filter(s => s.z || s.rx || s.ry);
+    const newStatesData = statesData.map((s, i) => {
+      if (i === 0) return s;
+      const rc = combo.removed[i - 1];
+      if (!rc) return {loads: [], elementQ: {}};
+      return {
+        loads: [{node: rc.node, Fz: rc.dof==='z'?1:0, Mx: rc.dof==='rx'?1:0, My: rc.dof==='ry'?1:0}],
+        elementQ: {}
+      };
+    });
+    setSupports(filteredSupports);
+    setStatesData(newStatesData);
+    try {
+      const res = computeAll(nodes, elements, filteredSupports, newStatesData);
+      setResults(res); setViewMode('mz'); setAppStage(3);
+    } catch (e) { setError(e.message); setResults(null); }
+  }, [selectedOption, basicSystemOptions, supports, statesData, nodes, elements]);
+
+  const handlePrimaryAction = () => {
+    if (appStage === 1) goToStage2();
+    else if (appStage === 2) goToStage3();
+    else calculate();
+  };
 
   const handleAutoFill = useCallback(() => {
     // 1. Zwolnij WSZYSTKIE n więzów w podporach (układ podstawowy)
@@ -1414,10 +1640,10 @@ function App() {
       const gj = parseFloat(firstEl.GJ) || 1;
       setEjGcRatioState(ei / gj);
     }
-    setActiveState(0);
+    setActiveState(0); setAppStage(1); setBSOptions([]); setSelectedOption(null);
     setResults(null); setError(null); setViewMode('structure'); resetView();
   };
-  const reset = () => { setNodes([]); setElements([]); setSupports([]); setStatesData([{loads:[], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}}]); setActiveState(0); setResults(null); setError(null); setViewMode('structure'); resetView(); };
+  const reset = () => { setNodes([]); setElements([]); setSupports([]); setStatesData([{loads:[], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}}]); setActiveState(0); setResults(null); setError(null); setViewMode('structure'); resetView(); setAppStage(1); setBSOptions([]); setSelectedOption(null); };
   const addNode = () => { setNodes([...nodes, {id: String.fromCharCode(65+nodes.length), x:0, y:0}]); };
   const updateNode = (i,k,v) => { const n=[...nodes]; n[i]={...n[i],[k]:v}; setNodes(n); };
   const removeNode = (i) => {
@@ -1546,6 +1772,7 @@ function App() {
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">offline / standalone</p>
             </div>
           </div>
+          <Stepper stage={appStage} onBack={setAppStage}/>
           <div className="flex items-center gap-2 flex-wrap">
             <select onChange={e => e.target.value && loadExample(e.target.value)} value="" className="bg-slate-800 border border-slate-700 text-xs px-3 py-1.5 rounded text-slate-300 focus:outline-none focus:border-cyan-500">
               <option value="">Wczytaj przykład…</option>
@@ -1556,7 +1783,10 @@ function App() {
             <button onClick={exportSchema} className="text-xs px-3 py-1.5 rounded text-slate-300 hover:text-cyan-300 hover:bg-cyan-950/30 flex items-center gap-1.5 border border-slate-700"><Save size={14}/> Zapisz</button>
             <button onClick={reset} className="text-xs px-3 py-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 flex items-center gap-1.5"><RotateCcw size={14}/> Reset</button>
             {results && <button onClick={handlePrint} className="text-xs px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 flex items-center gap-1.5 border border-slate-700"><Printer size={14}/> Drukuj</button>}
-            <button onClick={calculate} className="text-xs px-4 py-1.5 rounded bg-cyan-500 text-slate-100 font-semibold hover:bg-cyan-400 flex items-center gap-1.5 shadow-lg shadow-cyan-500/20"><Play size={14} fill="currentColor"/> Oblicz</button>
+            <button onClick={handlePrimaryAction} className="text-xs px-4 py-1.5 rounded bg-cyan-500 text-slate-100 font-semibold hover:bg-cyan-400 flex items-center gap-1.5 shadow-lg shadow-cyan-500/20">
+              <Play size={14} fill="currentColor"/>
+              {appStage === 1 ? 'Oblicz / Dalej' : appStage === 2 ? 'Oblicz / Dalej' : 'Oblicz ponownie'}
+            </button>
           </div>
         </div>
       </header>
@@ -1609,14 +1839,68 @@ function App() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* ── Etap 2: picker układu podstawowego ── */}
+        {appStage === 2 ? (
+          <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden no-print">
+            <div className="border-b border-slate-800 px-4 py-3 bg-slate-900/60">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-amber-300 font-bold text-sm">Etap 2 — Wybór układu podstawowego</span>
+                {staticInfo && (
+                  <span className={`px-2 py-0.5 rounded font-mono font-bold text-xs ring-1 ${staticInfo.n <= 2 ? 'text-amber-300 bg-amber-950/50 ring-amber-700/50' : 'text-rose-300 bg-rose-950/50 ring-rose-700/50'}`}>
+                    n = {staticInfo.n}
+                  </span>
+                )}
+                {staticInfo && <span className="text-[10px] font-mono text-slate-500">3·{staticInfo.m} + {staticInfo.r} − 3·{staticInfo.w} = {staticInfo.n}</span>}
+              </div>
+              <div className="mt-1 text-[11px] text-slate-400">Wybierz zestaw więzów do zwolnienia. Stany jednostkowe zostaną wypełnione automatycznie.</div>
+            </div>
+            <div className="p-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'420px'}}>
+              {basicSystemOptions.map((opt, idx) => (
+                <label key={idx} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedOption===idx ? 'border-cyan-600/60 bg-cyan-950/20 ring-1 ring-cyan-600/30' : 'border-slate-700/50 bg-slate-900/30 hover:border-slate-600'}`}>
+                  <input type="radio" name="basicSystem" checked={selectedOption===idx} onChange={()=>setSelectedOption(idx)} className="mt-1 accent-cyan-400 flex-shrink-0"/>
+                  <div className="flex items-start gap-3 flex-1 min-w-0 flex-wrap">
+                    <MiniBasicSystem nodes={nodes} elements={elements} supports={supports} removedConstraints={opt.removed}/>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Zwolnij {opt.removed.length} więz{opt.removed.length===1?'':opt.removed.length<5?'y':'ów'}:</div>
+                      <div className="space-y-1.5">
+                        {opt.removed.map((rc, i) => {
+                          const colors = ['text-violet-300','text-pink-300','text-amber-300'];
+                          const bgs = ['bg-violet-950/40 ring-violet-700/40','bg-pink-950/40 ring-pink-700/40','bg-amber-950/40 ring-amber-700/40'];
+                          return (
+                            <div key={i} className="text-sm font-mono leading-snug">
+                              <span className={`font-bold ${colors[i]||'text-slate-300'}`}>{rc.xi}</span>
+                              <span className="text-slate-400"> = zwolnij {rc.constraint}</span>
+                              <div className={`inline-block ml-2 text-[10px] px-1.5 py-px rounded ring-1 ${bgs[i]||'bg-slate-800 ring-slate-700'} ${colors[i]||'text-slate-400'}`}>
+                                Stan {rc.stateIdx}: {rc.dof==='z'?`Fz=1 w węźle ${rc.node}`:rc.dof==='rx'?`Mx=1 w węźle ${rc.node}`:`My=1 w węźle ${rc.node}`}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            {staticInfo && staticInfo.n > 2 && (
+              <div className="px-4 pb-3 text-[11px] text-rose-400">⚠ n &gt; 2 — interfejs obsługuje do n = 2. Zostaną wypełnione tylko X₁ i X₂.</div>
+            )}
+            <div className="border-t border-slate-800 px-4 py-2 flex items-center gap-2 text-[10px] text-slate-500">
+              <span>{basicSystemOptions.length} z {basicSystemOptions.length > 0 ? '?' : '0'} kombinacji geometrycznie niezmiennych</span>
+              <button onClick={() => setAppStage(1)} className="ml-auto text-slate-500 hover:text-cyan-300 px-2 py-1 rounded hover:bg-slate-800">← Wróć do schematu</button>
+            </div>
+          </div>
+        ) : (
+        /* ── Etap 1 / 3: edytor danych ── */
         <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden no-print">
           <div className="border-b border-slate-800 px-3 py-2 bg-slate-900/60 flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-slate-500">Stan:</span>
             <button onClick={()=>setActiveState(0)} className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${activeState===0?'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Stan 0 (obciążenia rzeczywiste)</button>
-            {results && <>
+            <>
               <button onClick={()=>setActiveState(1)} className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${activeState===1?'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Stan 1 (X₁=1)</button>
               <button onClick={()=>setActiveState(2)} className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${activeState===2?'bg-pink-500/20 text-pink-300 ring-1 ring-pink-500/40':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Stan 2 (X₂=1)</button>
-            </>}
+            </>
             {staticInfo !== null && (
               <span className={`ml-auto text-[10px] font-mono px-2 py-0.5 rounded ring-1 ${staticInfo.n < 0 ? 'text-orange-300 ring-orange-700/50 bg-orange-950/30' : staticInfo.n === 0 ? 'text-emerald-400 ring-emerald-700/50 bg-emerald-950/30' : staticInfo.n <= 2 ? 'text-amber-300 ring-amber-700/50 bg-amber-950/30' : 'text-rose-400 ring-rose-700/50 bg-rose-950/30'}`}>n = {staticInfo.n}</span>
             )}
@@ -1679,6 +1963,7 @@ function App() {
             </div>}
           </div>
         </div>
+        )}
 
         <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden">
           <div className="border-b border-slate-800 flex items-center bg-slate-900/60 no-print flex-wrap">
@@ -1702,55 +1987,7 @@ function App() {
 
       {error && <div className="max-w-7xl mx-auto px-6 no-print"><div className="bg-rose-950/40 border border-rose-900 rounded-lg px-4 py-3 text-sm text-rose-200">{error}</div></div>}
 
-      {results && <div className="max-w-7xl mx-auto px-6 pb-10 space-y-4">
-
-        {/* Krok 1: schemat gotowy, stany do uzupełnienia */}
-        {staticInfo !== null && staticInfo.n > 0 && !results.deltas && basicSystem.length > 0 && (
-          <div className="bg-amber-950/20 border border-amber-800/50 rounded-lg p-4">
-            <div className="flex items-center gap-3 flex-wrap mb-3">
-              <span className="text-amber-300 font-bold text-sm">Krok 1 gotowy</span>
-              <span className="text-slate-500 text-sm">— schemat zamodelowany. Uzupełnij stany i kliknij Oblicz ponownie.</span>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap mb-3">
-              <span className={`px-2 py-0.5 rounded font-mono font-bold text-sm ring-1 ${staticInfo.n <= 2 ? 'text-amber-300 bg-amber-950/50 ring-amber-700/50' : 'text-rose-300 bg-rose-950/50 ring-rose-700/50'}`}>n = {staticInfo.n}</span>
-              <span className="text-slate-300 text-sm">Układ {staticInfo.n}× statycznie niewyznaczalny</span>
-              <span className="text-xs font-mono text-slate-500">n = 3·{staticInfo.m} + {staticInfo.r} − 3·{staticInfo.w} = {staticInfo.n}</span>
-              {staticInfo.n > 2 && <span className="text-rose-400 text-[11px]">⚠ Interface obsługuje do n = 2 — wpisane zostaną tylko X₁ i X₂</span>}
-            </div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Krok 2 — zdefiniuj stany jednostkowe:</div>
-            <div className="space-y-2 mb-3">
-              {basicSystem.map((rel, i) => {
-                const inIface = i < 2;
-                return (
-                  <div key={i} className={`flex items-start gap-3 p-2.5 rounded-lg border ${inIface ? i===0 ? 'bg-violet-950/25 border-violet-800/40' : 'bg-pink-950/25 border-pink-800/40' : 'bg-slate-900/30 border-slate-800/30 opacity-50'}`}>
-                    <span className={`w-6 text-center py-px rounded font-bold text-[11px] ring-1 flex-shrink-0 mt-0.5 ${i===0?'text-violet-300 bg-violet-950/40 ring-violet-700/40':i===1?'text-pink-300 bg-pink-950/40 ring-pink-700/40':'text-slate-400 bg-slate-900/60 ring-slate-700/40'}`}>{rel.xi}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-mono text-slate-500 mb-0.5">zwolnij {rel.constraint} w układzie podstawowym</div>
-                      {inIface ? (
-                        <div className={`text-sm font-semibold ${i===0?'text-violet-200':i===1?'text-pink-200':''}`}>
-                          Przejdź do <span className="font-mono bg-slate-900/60 px-1 rounded">Stan {i+1}</span> → Obciążenia → dodaj: węzeł <span className="font-mono">{rel.node}</span>,&nbsp;
-                          <span className="font-mono">{rel.dof==='ry'?'My = 1':rel.dof==='rx'?'Mx = 1':'Fz = 1'}</span>
-                          , pozostałe = 0
-                        </div>
-                      ) : (
-                        <div className="text-xs text-slate-500">Stan {i+1} — poza interfejsem (n &gt; 2)</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-3 flex-wrap pt-2 border-t border-amber-800/30">
-              <button
-                onClick={handleAutoFill}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 ring-1 ring-amber-600/40 transition-colors"
-              >
-                ⚡ Zastosuj układ podstawowy i wpisz stany
-              </button>
-              <span className="text-[11px] text-slate-500">zwolni więzy w podporach + wpisze obciążenia jednostkowe — potem kliknij <span className="text-cyan-400 font-semibold">▶ Oblicz</span></span>
-            </div>
-          </div>
-        )}
+      {appStage === 3 && results && <div className="max-w-7xl mx-auto px-6 pb-10 space-y-4">
 
         {results.deltas && <div className="bg-emerald-950/30 border border-emerald-800/50 rounded-lg p-4">
           <div className="text-xs uppercase tracking-wider text-emerald-300 mb-3 font-semibold flex items-center gap-3 flex-wrap">

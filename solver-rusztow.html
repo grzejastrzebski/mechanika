@@ -623,31 +623,25 @@ function enumerateCombinations(arr, k) {
   ];
 }
 
-// Sprawdza geometryczną niezmienność układu podstawowego (po zwolnieniu więzów).
-// Warunki równowagi rusztu w płaszczyźnie xy: ΣFz, ΣMx, ΣMy muszą być bilansowalne.
-function isGeometricallyStable(remainingSupports, nodes) {
-  const nodeMap = {};
-  nodes.forEach(n => { nodeMap[n.id] = n; });
-  let hasZ = false, hasRx = false, hasRy = false;
-  const zPts = [];
-  for (const sup of remainingSupports) {
-    const nd = nodeMap[sup.node]; if (!nd) continue;
-    const x = parseFloat(nd.x)||0, y = parseFloat(nd.y)||0;
-    if (sup.z)  { hasZ = true; zPts.push({x, y}); }
-    if (sup.rx) hasRx = true;
-    if (sup.ry) hasRy = true;
+// Sprawdza geometryczną niezmienność układu podstawowego (po zwolnieniu więzów), UWZGLĘDNIAJĄC
+// przeguby (elementy z release1/release2 wnoszą zerową sztywność na zwolnionych składowych —
+// jeśli to one są jedynym źródłem sztywności dla danego DOF węzła, usunięcie odpowiadającej
+// podpory tworzy mechanizm, mimo że sama "topologia podpór" wyglądałaby na stabilną).
+// Najpewniejszy test: spróbować faktycznie złożyć i rozwiązać układ (bez obciążeń) tym samym
+// silnikiem (solveGrillage) — jeśli macierz jest osobliwa, solver rzuci wyjątek.
+function isGeometricallyStable(remainingSupports, nodes, elements) {
+  if (!elements) return true; // brak elementów = brak możliwości weryfikacji silnikiem
+  try {
+    solveGrillage(nodes, elements, remainingSupports, []);
+    return true;
+  } catch (e) {
+    return false;
   }
-  if (!hasZ) return false;
-  const ys = new Set(zPts.map(p => Math.round(p.y * 1e6)));
-  const xs = new Set(zPts.map(p => Math.round(p.x * 1e6)));
-  if (!hasRx && ys.size < 2) return false;
-  if (!hasRy && xs.size < 2) return false;
-  return true;
 }
 
 // Enumeruje wszystkie geometrycznie niezmienne układy podstawowe dla n zwolnień.
 // Zwraca {valid: [{removed:[…], remaining:[…]}, …], total: N}
-function enumerateBasicSystems(supports, nodes, n) {
+function enumerateBasicSystems(supports, nodes, elements, n) {
   if (n <= 0) return {valid: [], total: 0};
   const allCons = getAllConstraints(supports);
   const allCombos = enumerateCombinations(allCons, n);
@@ -659,7 +653,7 @@ function enumerateBasicSystems(supports, nodes, n) {
       if (idx !== -1) modified[idx] = {...modified[idx], [rc.dof]: false};
     });
     const remaining = modified.filter(s => s.z || s.rx || s.ry);
-    if (isGeometricallyStable(remaining, nodes)) {
+    if (isGeometricallyStable(remaining, nodes, elements)) {
       const removed = combo.map((rc, i) => ({
         ...rc,
         xi: 'X' + (XI_SUB[i] || (i+1)),
@@ -1745,9 +1739,9 @@ function App() {
       } catch (e) { setError(e.message); }
       return;
     }
-    const {valid, total} = enumerateBasicSystems(supports, nodes, info.n);
+    const {valid, total} = enumerateBasicSystems(supports, nodes, elements, info.n);
     if (valid.length === 0) {
-      setError(`Brak geometrycznie niezmiennych układów podstawowych (sprawdzono ${total} kombinacji). Sprawdź podpory.`);
+      setError(`Brak geometrycznie niezmiennych układów podstawowych (sprawdzono ${total} kombinacji). Sprawdź podpory i przeguby.`);
       return;
     }
     setBSOptions(valid); setSelectedOption(0); setAppStage(2);

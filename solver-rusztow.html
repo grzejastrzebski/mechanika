@@ -1354,6 +1354,63 @@ function Stepper({stage, onBack}) {
   );
 }
 
+// Prosta strzałka (siła) — wektorowa, obracalna, kolor przez prop. Domyślnie skierowana w górę.
+function ForceArrow({x, y, angle=0, length=18, color='#0891b2'}) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${angle})`}>
+      <line x1="0" y1="0" x2="0" y2={-length} stroke={color} strokeWidth="1.6"/>
+      <path d={`M -3 ${-length+5} L 0 ${-length} L 3 ${-length+5}`} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </g>
+  );
+}
+
+// Strzałka łukowa (moment) — ~270° łuk z grotem na końcu, obracalna, kolor przez prop.
+function MomentArrow({x, y, radius=11, angle=0, color='#0891b2', ccw=false}) {
+  const sweep = ccw ? 0 : 1;
+  const startA = 0, endA = ccw ? 90 : -90; // łuk ~270° (od startA, idąc "dłuższą drogą")
+  const toRad = a => a * Math.PI / 180;
+  const sx = radius * Math.cos(toRad(startA)), sy = radius * Math.sin(toRad(startA));
+  const ex = radius * Math.cos(toRad(endA)), ey = radius * Math.sin(toRad(endA));
+  const largeArc = 1;
+  // grot na końcu łuku, tangencjalny do okręgu
+  const tangentA = endA + (ccw ? -90 : 90);
+  const headLen = 4.5;
+  const hx1 = ex + headLen * Math.cos(toRad(tangentA + 150)), hy1 = ey + headLen * Math.sin(toRad(tangentA + 150));
+  const hx2 = ex + headLen * Math.cos(toRad(tangentA - 150)), hy2 = ey + headLen * Math.sin(toRad(tangentA - 150));
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${angle})`}>
+      <path d={`M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArc} ${sweep} ${ex} ${ey}`} fill="none" stroke={color} strokeWidth="1.6"/>
+      <path d={`M ${hx1} ${hy1} L ${ex} ${ey} L ${hx2} ${hy2}`} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </g>
+  );
+}
+
+// Presety typów podpór dla rusztu (DOF: z, rx, ry). "Własna" = sentinel bez ustawionej kombinacji.
+const SUPPORT_PRESETS = [
+  { key: 'fixed',   label: 'Utwierdzenie',                          dof: {z:true,  rx:true,  ry:true} },
+  { key: 'pin',     label: 'Podpora przegubowa',                    dof: {z:true,  rx:false, ry:false} },
+  { key: 'dirRx',   label: 'Podpora kierunkowa (blokuje skręt)',     dof: {z:true,  rx:true,  ry:false} },
+  { key: 'dirRy',   label: 'Podpora kierunkowa (blokuje zginanie)',  dof: {z:true,  rx:false, ry:true} },
+  { key: 'custom',  label: 'Własna…',                                dof: null },
+];
+function matchSupportPreset(sup) {
+  const found = SUPPORT_PRESETS.find(p => p.dof && !!p.dof.z===!!sup.z && !!p.dof.rx===!!sup.rx && !!p.dof.ry===!!sup.ry);
+  return found ? found.key : 'custom';
+}
+// Mała grafika podglądowa presetu: strzałka dla z, łuk dla rx/ry.
+function SupportPresetIcon({dof, size=34, color='#0891b2'}) {
+  if (!dof) return <svg width={size} height={size} viewBox="0 0 34 34"><text x="17" y="21" textAnchor="middle" fontSize="9" fill={color} fontFamily="monospace">?</text></svg>;
+  const cx = 17, cy = 24;
+  return (
+    <svg width={size} height={size} viewBox="0 0 34 34">
+      <circle cx={cx} cy={cy} r="2.5" fill="#fff" stroke={color} strokeWidth="1.2"/>
+      {dof.z && <ForceArrow x={cx} y={cy} angle={0} length={14} color={color}/>}
+      {dof.rx && <MomentArrow x={cx} y={cy} radius={dof.z?9:7} angle={dof.z?-40:0} color={color}/>}
+      {dof.ry && <MomentArrow x={cx} y={cy} radius={dof.z?9:7} angle={dof.z?(dof.rx?140:-40):0} color={color} ccw/>}
+    </svg>
+  );
+}
+
 function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=130, height=85}) {
   if (!nodes.length) return null;
   const pad = 16;
@@ -1411,7 +1468,32 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
         const nd = nodes.find(n => n.id===rc.node); if (!nd) return null;
         const px = tx(parseFloat(nd.x)||0), py = ty(parseFloat(nd.y)||0);
         const colors = ['#7c3aed','#db2777','#d97706'];
-        return <text key={`xi${i}`} x={px+10} y={py+8+i*9} fontSize="8" fill={colors[i]||'#e11d48'} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>;
+        const color = colors[i] || '#e11d48';
+        // Wiele zwolnionych więzów w tym samym węźle: siły rozstrzelamy kątowo, momenty —
+        // koncentrycznie (różne radiusy), żeby łuki się nie pokrywały wizualnie.
+        const sameNode = removedConstraints.filter(r => r.node === rc.node);
+        const sameNodeForces = sameNode.filter(r => r.dof === 'z');
+        const sameNodeMoments = sameNode.filter(r => r.dof !== 'z');
+        const arrowLen = Math.min(width, height) * 0.22;
+        if (rc.dof === 'z') {
+          const localIdx = sameNodeForces.indexOf(rc);
+          const angle = localIdx * 40;
+          return (
+            <g key={`xi${i}`}>
+              <ForceArrow x={px} y={py} angle={angle} length={arrowLen} color={color}/>
+              <text x={px + arrowLen*Math.sin(angle*Math.PI/180) + 4} y={py - arrowLen*Math.cos(angle*Math.PI/180) - 2} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>
+            </g>
+          );
+        }
+        const momentIdx = sameNodeMoments.indexOf(rc);
+        const radius = arrowLen * 0.5 + momentIdx * (arrowLen * 0.32);
+        const angle = -45;
+        return (
+          <g key={`xi${i}`}>
+            <MomentArrow x={px} y={py} radius={radius} angle={angle} color={color} ccw={rc.dof==='ry'}/>
+            <text x={px + (radius+7)*Math.sin(angle*Math.PI/180)} y={py - (radius+7)*Math.cos(angle*Math.PI/180)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>
+          </g>
+        );
       })}
     </svg>
   );
@@ -1480,6 +1562,11 @@ function App() {
   const [appStage, setAppStage] = useState(1);
   const [basicSystemOptions, setBSOptions] = useState([]);
   const [selectedOption, setSelectedOption] = useState(null);
+
+  // Wiersze podpór wymuszone na "Własna" (checkboxy), nawet gdy aktualna kombinacja
+  // z/rx/ry pasuje akurat do jednego z presetów — inaczej kontrolowany <select> wracałby
+  // od razu do dopasowanego presetu i "Własna" byłaby nieosiągalna.
+  const [forceCustomSupport, setForceCustomSupport] = useState({});
 
   // Wybór jednostek symbolicznych dla różnych typów wyników
   // Sufiks symboliczny dla wartości danego typu (kind) w danym stanie (stateIdx).
@@ -1860,7 +1947,6 @@ function App() {
                 <label key={idx} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedOption===idx ? 'border-cyan-600/60 bg-cyan-950/20 ring-1 ring-cyan-600/30' : 'border-slate-700/50 bg-slate-900/30 hover:border-slate-600'}`}>
                   <input type="radio" name="basicSystem" checked={selectedOption===idx} onChange={()=>setSelectedOption(idx)} className="mt-1 accent-cyan-400 flex-shrink-0"/>
                   <div className="flex items-start gap-3 flex-1 min-w-0 flex-wrap">
-                    <MiniBasicSystem nodes={nodes} elements={elements} supports={supports} removedConstraints={opt.removed}/>
                     <div className="flex-1 min-w-0">
                       <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Zwolnij {opt.removed.length} więz{opt.removed.length===1?'':opt.removed.length<5?'y':'ów'}:</div>
                       <div className="space-y-1.5">
@@ -1938,14 +2024,46 @@ function App() {
               <button className={`${addBtn} mt-3`} onClick={addElement}><Plus size={12}/> Dodaj pręt</button>
             </div>}
             {activeTab==='supports' && <div>
-              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">Węzeł</th><th className="text-center py-2 font-medium">w</th><th className="text-center py-2 font-medium">θx</th><th className="text-center py-2 font-medium">θy</th><th></th></tr></thead><tbody>
-                {supports.map((sup,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
-                  <td><select className={inputCell} value={sup.node} onChange={e=>updateSupport(i,'node',e.target.value)}><option value="">—</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select></td>
-                  <td className="text-center"><input type="checkbox" className={checkCell} checked={!!sup.z} onChange={e=>updateSupport(i,'z',e.target.checked)}/></td>
-                  <td className="text-center"><input type="checkbox" className={checkCell} checked={!!sup.rx} onChange={e=>updateSupport(i,'rx',e.target.checked)}/></td>
-                  <td className="text-center"><input type="checkbox" className={checkCell} checked={!!sup.ry} onChange={e=>updateSupport(i,'ry',e.target.checked)}/></td>
-                  <td className="text-right"><button className={iconBtn} onClick={()=>removeSupport(i)}><Trash2 size={14}/></button></td>
-                </tr>)}
+              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">Węzeł</th><th className="text-center py-2 font-medium">Podgląd</th><th className="text-left py-2 font-medium">Typ podpory</th><th></th></tr></thead><tbody>
+                {supports.map((sup,i) => {
+                  const presetKey = forceCustomSupport[i] ? 'custom' : matchSupportPreset(sup);
+                  const preset = SUPPORT_PRESETS.find(p => p.key === presetKey);
+                  return (
+                  <React.Fragment key={i}>
+                  <tr className="border-b border-slate-800/50 hover:bg-slate-900/40">
+                    <td><select className={inputCell} value={sup.node} onChange={e=>updateSupport(i,'node',e.target.value)}><option value="">—</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select></td>
+                    <td className="text-center"><SupportPresetIcon dof={preset.dof || sup}/></td>
+                    <td>
+                      <select className={inputCell} value={presetKey} onChange={e => {
+                        const key = e.target.value;
+                        const p = SUPPORT_PRESETS.find(p => p.key === key);
+                        if (p && p.dof) {
+                          updateSupport(i,'z',p.dof.z); updateSupport(i,'rx',p.dof.rx); updateSupport(i,'ry',p.dof.ry);
+                          setForceCustomSupport(prev => { const next = {...prev}; delete next[i]; return next; });
+                        } else {
+                          setForceCustomSupport(prev => ({...prev, [i]: true}));
+                        }
+                      }}>
+                        {SUPPORT_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                      </select>
+                    </td>
+                    <td className="text-right"><button className={iconBtn} onClick={()=>removeSupport(i)}><Trash2 size={14}/></button></td>
+                  </tr>
+                  {presetKey === 'custom' && (
+                    <tr className="border-b border-slate-800/50 bg-slate-950/40">
+                      <td></td>
+                      <td colSpan="3" className="py-2">
+                        <div className="flex items-center gap-4 text-xs text-slate-400">
+                          <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" className={checkCell} checked={!!sup.z} onChange={e=>updateSupport(i,'z',e.target.checked)}/> w (Fz)</label>
+                          <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" className={checkCell} checked={!!sup.rx} onChange={e=>updateSupport(i,'rx',e.target.checked)}/> θx (Mx)</label>
+                          <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" className={checkCell} checked={!!sup.ry} onChange={e=>updateSupport(i,'ry',e.target.checked)}/> θy (My)</label>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                  );
+                })}
               </tbody></table>
               <button className={`${addBtn} mt-3`} onClick={addSupport}><Plus size={12}/> Dodaj podporę</button>
             </div>}
@@ -1965,6 +2083,19 @@ function App() {
         </div>
         )}
 
+        {appStage === 2 ? (
+        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden no-print">
+          <div className="border-b border-slate-800 px-4 py-3 bg-slate-900/60">
+            <span className="text-amber-300 font-bold text-sm">Wybrany układ podstawowy</span>
+            <div className="mt-1 text-[11px] text-slate-400">Strzałka prosta = siła (X = Fz), strzałka łukowa = moment (X = Mx/My), w założonym dodatnim kierunku.</div>
+          </div>
+          <div className="p-4 flex items-center justify-center" style={{minHeight:'360px'}}>
+            {selectedOption !== null && basicSystemOptions[selectedOption] ? (
+              <MiniBasicSystem nodes={nodes} elements={elements} supports={supports} removedConstraints={basicSystemOptions[selectedOption].removed} width={360} height={320}/>
+            ) : <span className="text-slate-500 text-sm">Wybierz kombinację z listy po lewej.</span>}
+          </div>
+        </div>
+        ) : (
         <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden">
           <div className="border-b border-slate-800 flex items-center bg-slate-900/60 no-print flex-wrap">
             <button onClick={()=>setViewMode('structure')} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='structure'?'text-slate-200 border-slate-400':'text-slate-500 border-transparent hover:text-slate-300'}`}><Eye size={12}/> Schemat</button>
@@ -1983,6 +2114,7 @@ function App() {
             <StructureView nodes={nodes} elements={elementsForView} supports={supports} loads={loads} results={displayResults} viewMode={viewMode==='mzFinal'?'mz':(viewMode==='msFinal'?'ms':viewMode)} view={view} setView={setView} momentSuffix={symSuffix('M', (viewMode==='mzFinal'||viewMode==='msFinal') ? 0 : activeState)}/>
           </div>
         </div>
+        )}
       </div>
 
       {error && <div className="max-w-7xl mx-auto px-6 no-print"><div className="bg-rose-950/40 border border-rose-900 rounded-lg px-4 py-3 text-sm text-rose-200">{error}</div></div>}

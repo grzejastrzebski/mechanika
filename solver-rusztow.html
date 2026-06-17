@@ -117,7 +117,7 @@ function solveLinear(A, b) {
       if (Math.abs(M[i][k]) > maxVal) { maxVal = Math.abs(M[i][k]); maxRow = i; }
     }
     if (maxRow !== k) [M[k], M[maxRow]] = [M[maxRow], M[k]];
-    if (Math.abs(M[k][k]) < 1e-12) throw new Error('Macierz osobliwa — sprawdź podpory i geometrię.');
+    if (Math.abs(M[k][k]) < 1e-12) throw new Error('Macierz osobliwa — sprawdź podpory, geometrię i przeguby (zbyt wiele zwolnień może tworzyć mechanizm).');
     for (let i = k + 1; i < n; i++) {
       const f = M[i][k] / M[k][k];
       for (let j = k; j <= n; j++) M[i][j] -= f * M[k][j];
@@ -161,6 +161,69 @@ function matMul(A, B) {
 function matVec(A, v) { return A.map(row => row.reduce((s,a,i)=>s+a*v[i], 0)); }
 function transpose(A) { return A[0].map((_, i) => A.map(row => row[i])); }
 
+// Przeguby: lokalne indeksy DOF elementu (0..5 = w1,rx1,ry1,w2,rx2,ry2) zwolnione przez
+// release1/release2 ({mg, ms} na każdym końcu pręta). `mg` = moment gnący (oś zginania, ry),
+// `ms` = moment skrętny (oś skręcania, rx). Przegub nigdy nie zwalnia `w` (ugięcia/siły poprzecznej).
+function getReleasedLocalIndices(el) {
+  const idx = [];
+  if (el.release1) { if (el.release1.ms) idx.push(1); if (el.release1.mg) idx.push(2); }
+  if (el.release2) { if (el.release2.ms) idx.push(4); if (el.release2.mg) idx.push(5); }
+  return idx;
+}
+
+// Kondensacja statyczna (Guyan) lokalnej sztywności 6×6 po zbiorze zwolnionych indeksów `B`:
+// usuwa B z układu (zerowa sztywność/obciążenie na B w wyniku), korygując sztywność i obciążenie
+// równoważne na pozostałych DOF `A`. Używana WYŁĄCZNIE do assemblacji globalnego układu — oryginalne
+// Klocal/fEqLocal trzeba zachować osobno do odzyskania sił wewnętrznych (recoverFullLocalDisp).
+function condenseLocalStiffness(Klocal, fEqLocal, releasedIdx) {
+  if (!releasedIdx.length) return {Kcond: Klocal, fCond: fEqLocal};
+  const B = releasedIdx;
+  const A = [0,1,2,3,4,5].filter(i => !B.includes(i));
+  const Kab = A.map(i => B.map(j => Klocal[i][j]));
+  const Kba = B.map(i => A.map(j => Klocal[i][j]));
+  const Kbb = B.map(i => B.map(j => Klocal[i][j]));
+  const fA = A.map(i => fEqLocal[i]);
+  const fB = B.map(i => fEqLocal[i]);
+  // KbbInvKba[k] = Kbb⁻¹·Kba[:,k] (wektor dł. |B|), dla każdej kolumny k odpowiadającej indeksowi A[k]
+  const KbbInvKba = A.map((_, k) => {
+    const col = B.map((_, r) => Kba[r][k]);
+    return solveLinear(Kbb, col);
+  });
+  const KbbInvFb = solveLinear(Kbb, fB);
+  const nA = A.length;
+  const Kcond = Array.from({length:6}, () => new Array(6).fill(0));
+  const fCond = new Array(6).fill(0);
+  for (let i = 0; i < nA; i++) {
+    let fCorr = 0;
+    for (let b = 0; b < B.length; b++) fCorr += Kab[i][b] * KbbInvFb[b];
+    fCond[A[i]] = fA[i] - fCorr;
+    for (let j = 0; j < nA; j++) {
+      let s = 0;
+      for (let b = 0; b < B.length; b++) s += Kab[i][b] * KbbInvKba[j][b];
+      Kcond[A[i]][A[j]] = Klocal[A[i]][A[j]] - s;
+    }
+  }
+  return {Kcond, fCond};
+}
+
+// Po rozwiązaniu globalnego układu, `ul` (z transformacji T·ug) ma poprawne wartości tylko na
+// zachowanych DOF — na zwolnionych (B) trzeba odtworzyć lokalny obrót, niezależny od węzła,
+// z warunku przegubu (moment/siła na B = fEqLocal[B], czyli zerowy DODATKOWY moment).
+function recoverFullLocalDisp(Klocal, fEqLocal, releasedIdx, ul) {
+  if (!releasedIdx.length) return ul;
+  const B = releasedIdx;
+  const A = [0,1,2,3,4,5].filter(i => !B.includes(i));
+  const Kba = B.map(i => A.map(j => Klocal[i][j]));
+  const Kbb = B.map(i => B.map(j => Klocal[i][j]));
+  const fB = B.map(i => fEqLocal[i]);
+  const ua = A.map(i => ul[i]);
+  const rhs = fB.map((f, i) => f - Kba[i].reduce((s,v,k) => s + v*ua[k], 0));
+  const ub = solveLinear(Kbb, rhs);
+  const ulFull = [...ul];
+  B.forEach((idx, i) => { ulFull[idx] = ub[i]; });
+  return ulFull;
+}
+
 function solveGrillage(nodes, elements, supports, loads) {
   if (nodes.length === 0) throw new Error('Brak węzłów.');
   if (elements.length === 0) throw new Error('Brak prętów.');
@@ -185,19 +248,23 @@ function solveGrillage(nodes, elements, supports, loads) {
     const q = parseFloat(el.q) || 0;
     const Klocal = elementLocalStiffness(L, EI, GJ);
     const T = transformationMatrix(angle);
-    const Kglobal = matMul(matMul(transpose(T), Klocal), T);
     const dofs = [i1*3, i1*3+1, i1*3+2, i2*3, i2*3+1, i2*3+2];
-    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) K[dofs[i]][dofs[j]] += Kglobal[i][j];
     // Wektor sił równoważnych dla obciążenia ciągłego q (w kierunku z, lokalnie):
     // f_eq_local = [qL/2, 0, qL²/12, qL/2, 0, -qL²/12]
     const fEqLocal = [q*L/2, 0, q*L*L/12, q*L/2, 0, -q*L*L/12];
+    const releasedIdx = getReleasedLocalIndices(el);
+    // Przeguby: kondensacja statyczna zwolnionych DOF PRZED assemblacją do globalnego układu —
+    // Klocal/fEqLocal oryginalne (nieskondensowane) zachowujemy do odzyskania sił wewnętrznych.
+    const {Kcond, fCond} = condenseLocalStiffness(Klocal, fEqLocal, releasedIdx);
+    const Kglobal = matMul(matMul(transpose(T), Kcond), T);
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) K[dofs[i]][dofs[j]] += Kglobal[i][j];
     // Transformacja do globalnego: f_eq_global = T^T * f_eq_local
     const Tt = transpose(T);
-    const fEqGlobal = matVec(Tt, fEqLocal);
-    if (q !== 0) {
+    const fEqGlobal = matVec(Tt, fCond);
+    if (q !== 0 || releasedIdx.length) {
       for (let i = 0; i < 6; i++) F[dofs[i]] += fEqGlobal[i];
     }
-    elementInfo.push({el, i1, i2, L, angle, Klocal, T, dofs, q, fEqLocal});
+    elementInfo.push({el, i1, i2, L, angle, Klocal, T, dofs, q, fEqLocal, releasedIdx});
   }
 
   for (const load of loads) {
@@ -231,10 +298,11 @@ function solveGrillage(nodes, elements, supports, loads) {
   const Ku = matVec(K, u);
   const R = Ku.map((v, i) => v - F[i]);
 
-  const elementForces = elementInfo.map(({el, L, T, Klocal, dofs, q, fEqLocal}) => {
+  const elementForces = elementInfo.map(({el, L, T, Klocal, dofs, q, fEqLocal, releasedIdx}) => {
     const ug = dofs.map(d => u[d]);
     const ul = matVec(T, ug);
-    const fl = matVec(Klocal, ul).map((v, i) => v - fEqLocal[i]);
+    const ulFull = recoverFullLocalDisp(Klocal, fEqLocal, releasedIdx, ul);
+    const fl = matVec(Klocal, ulFull).map((v, i) => v - fEqLocal[i]);
     return {
       el, L, q,
       V1: fl[0], Ms1: fl[1], Mz1: fl[2],
@@ -492,7 +560,8 @@ function multiplicationFormula(s0, s1, L, sym, state0='', state1='') {
 }
 
 // Stopień statycznej niewyznaczalności rusztu płaskiego:
-// n = 3m + r − 3w  (3 równania równowagi na węzeł: ΣFz, ΣMx, ΣMy)
+// n = 3m + r − 3w − h  (3 równania równowagi na węzeł: ΣFz, ΣMx, ΣMy; h = liczba niezależnych
+// zwolnień przegubowych Mg/Ms — każde zmniejsza n o 1, zgodnie z metodą sił)
 function computeStaticDegree(nodes, elements, supports) {
   const m = elements.length, w = nodes.length;
   if (w === 0 || m === 0) return null;
@@ -502,7 +571,9 @@ function computeStaticDegree(nodes, elements, supports) {
     if (sup.rx) r++;
     if (sup.ry) r++;
   }
-  return { n: 3 * m + r - 3 * w, m, w, r };
+  let h = 0;
+  for (const el of elements) h += getReleasedLocalIndices(el).length;
+  return { n: 3 * m + r - 3 * w - h, m, w, r, h };
 }
 
 // Propozycja układu podstawowego: zwalnia więzy zachłannie (ry→rx→z,
@@ -997,12 +1068,17 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
         const x1=tx(parseFloat(n1.x)||0), y1=ty(parseFloat(n1.y)||0);
         const x2=tx(parseFloat(n2.x)||0), y2=ty(parseFloat(n2.y)||0);
         const mx=(x1+x2)/2, my=(y1+y2)/2;
+        const ex=x2-x1, ey=y2-y1, elen=Math.sqrt(ex*ex+ey*ey)||1;
+        const ux=ex/elen, uy=ey/elen;
+        const hingeOffset = Math.min(elen*0.18, 14);
         return (
           <g key={`el-${el.id}`}>
             <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#16243a" strokeWidth="2.5"/>
             {viewMode==='structure' && (<>
               <circle cx={mx} cy={my} r="9" fill="#ffffff" stroke="#16243a" strokeWidth="1"/>
               <text x={mx} y={my+3} textAnchor="middle" fill="#5a6b80" fontSize="9" fontFamily="monospace">{el.id}</text>
+              {el.release1 && <HingeMark x={x1+ux*hingeOffset} y={y1+uy*hingeOffset} mg={el.release1.mg} ms={el.release1.ms}/>}
+              {el.release2 && <HingeMark x={x2-ux*hingeOffset} y={y2-uy*hingeOffset} mg={el.release2.mg} ms={el.release2.ms}/>}
             </>)}
           </g>
         );
@@ -1408,6 +1484,30 @@ function SupportPresetIcon({dof, size=34, color='#0891b2'}) {
       {dof.rx && <MomentArrow x={cx} y={cy} radius={dof.z?9:7} angle={dof.z?-40:0} color={color}/>}
       {dof.ry && <MomentArrow x={cx} y={cy} radius={dof.z?9:7} angle={dof.z?(dof.rx?140:-40):0} color={color} ccw/>}
     </svg>
+  );
+}
+
+// Przeguby na końcach prętów: presety wyboru, co zwalniają (Mg = moment gnący, Ms = moment skrętny).
+const RELEASE_OPTIONS = [
+  { key: 'none', label: 'Brak',           mg: false, ms: false },
+  { key: 'mg',   label: 'Mg (zginający)', mg: true,  ms: false },
+  { key: 'ms',   label: 'Ms (skrętny)',   mg: false, ms: true  },
+  { key: 'both', label: 'Mg+Ms (pełny)',  mg: true,  ms: true  },
+];
+function releaseKey(r) {
+  if (!r || (!r.mg && !r.ms)) return 'none';
+  if (r.mg && r.ms) return 'both';
+  return r.mg ? 'mg' : 'ms';
+}
+// Symbol przegubu na schemacie: otwarte kółko przy końcu pręta, z podpisem zwalnianej składowej.
+function HingeMark({x, y, mg, ms, size=5, color='#d97706'}) {
+  if (!mg && !ms) return null;
+  const label = mg && ms ? 'g,s' : mg ? 'g' : 's';
+  return (
+    <g>
+      <circle cx={x} cy={y} r={size} fill="#fff" stroke={color} strokeWidth="1.6"/>
+      <text x={x} y={y-size-3} textAnchor="middle" fill={color} fontSize="7" fontFamily="monospace" fontWeight="bold">{label}</text>
+    </g>
   );
 }
 
@@ -1938,7 +2038,7 @@ function App() {
                     n = {staticInfo.n}
                   </span>
                 )}
-                {staticInfo && <span className="text-[10px] font-mono text-slate-500">3·{staticInfo.m} + {staticInfo.r} − 3·{staticInfo.w} = {staticInfo.n}</span>}
+                {staticInfo && <span className="text-[10px] font-mono text-slate-500">3·{staticInfo.m} + {staticInfo.r} − 3·{staticInfo.w}{staticInfo.h ? ` − ${staticInfo.h}` : ''} = {staticInfo.n}</span>}
               </div>
               <div className="mt-1 text-[11px] text-slate-400">Wybierz zestaw więzów do zwolnienia. Stany jednostkowe zostaną wypełnione automatycznie.</div>
             </div>
@@ -2010,7 +2110,7 @@ function App() {
               <button className={`${addBtn} mt-3`} onClick={addNode}><Plus size={12}/> Dodaj węzeł</button>
             </div>}
             {activeTab==='elements' && <div>
-              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">ID</th><th className="text-left py-2 font-medium">Węzeł 1</th><th className="text-left py-2 font-medium">Węzeł 2</th><th className="text-left py-2 font-medium">EI</th><th className="text-left py-2 font-medium">GJ</th><th className="text-left py-2 font-medium" title="Obciążenie ciągłe (siła na metr). Ujemna = w dół.">q</th><th></th></tr></thead><tbody>
+              <table className="w-full text-sm"><thead className="text-[10px] uppercase text-slate-500 tracking-wider"><tr className="border-b border-slate-800"><th className="text-left py-2 font-medium">ID</th><th className="text-left py-2 font-medium">Węzeł 1</th><th className="text-left py-2 font-medium">Węzeł 2</th><th className="text-left py-2 font-medium">EI</th><th className="text-left py-2 font-medium">GJ</th><th className="text-left py-2 font-medium" title="Obciążenie ciągłe (siła na metr). Ujemna = w dół.">q</th><th className="text-left py-2 font-medium" title="Przegub na końcu w węźle 1 — zwalnia moment gnący i/lub skrętny">Przegub w.1</th><th className="text-left py-2 font-medium" title="Przegub na końcu w węźle 2">Przegub w.2</th><th></th></tr></thead><tbody>
                 {elements.map((el,i) => <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/40">
                   <td className="font-mono text-xs px-2 text-slate-400">{el.id}</td>
                   <td><select className={inputCell} value={el.n1} onChange={e=>updateElement(i,'n1',e.target.value)}><option value="">—</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select></td>
@@ -2018,6 +2118,22 @@ function App() {
                   <td><input className={inputCell} type="number" step="0.1" value={el.EI} onChange={e=>updateElement(i,'EI',e.target.value)}/></td>
                   <td><input className={inputCell} type="number" step="0.1" value={el.GJ} onChange={e=>updateElement(i,'GJ',e.target.value)}/></td>
                   <td><input className={inputCell} type="number" step="0.5" value={getQ(el.id)} onChange={e=>setQ(el.id, e.target.value)}/></td>
+                  <td>
+                    <select className={inputCell} value={releaseKey(el.release1)} onChange={e => {
+                      const opt = RELEASE_OPTIONS.find(o => o.key === e.target.value);
+                      updateElement(i, 'release1', {mg: opt.mg, ms: opt.ms});
+                    }}>
+                      {RELEASE_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <select className={inputCell} value={releaseKey(el.release2)} onChange={e => {
+                      const opt = RELEASE_OPTIONS.find(o => o.key === e.target.value);
+                      updateElement(i, 'release2', {mg: opt.mg, ms: opt.ms});
+                    }}>
+                      {RELEASE_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                    </select>
+                  </td>
                   <td className="text-right"><button className={iconBtn} onClick={()=>removeElement(i)}><Trash2 size={14}/></button></td>
                 </tr>)}
               </tbody></table>

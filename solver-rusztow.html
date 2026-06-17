@@ -162,12 +162,13 @@ function matVec(A, v) { return A.map(row => row.reduce((s,a,i)=>s+a*v[i], 0)); }
 function transpose(A) { return A[0].map((_, i) => A.map(row => row[i])); }
 
 // Przeguby: lokalne indeksy DOF elementu (0..5 = w1,rx1,ry1,w2,rx2,ry2) zwolnione przez
-// release1/release2 ({mg, ms} na każdym końcu pręta). `mg` = moment gnący (oś zginania, ry),
-// `ms` = moment skrętny (oś skręcania, rx). Przegub nigdy nie zwalnia `w` (ugięcia/siły poprzecznej).
+// release1/release2 ({mg, ms, v} na każdym końcu pręta). `mg` = moment gnący (oś zginania, ry),
+// `ms` = moment skrętny (oś skręcania, rx), `v` = siła tnąca (ciągłość przemieszczenia w —
+// używane dziś tylko przez generator kombinacji w Etapie 2, nie przez UI ręcznego wyboru przegubu).
 function getReleasedLocalIndices(el) {
   const idx = [];
-  if (el.release1) { if (el.release1.ms) idx.push(1); if (el.release1.mg) idx.push(2); }
-  if (el.release2) { if (el.release2.ms) idx.push(4); if (el.release2.mg) idx.push(5); }
+  if (el.release1) { if (el.release1.ms) idx.push(1); if (el.release1.mg) idx.push(2); if (el.release1.v) idx.push(0); }
+  if (el.release2) { if (el.release2.ms) idx.push(4); if (el.release2.mg) idx.push(5); if (el.release2.v) idx.push(3); }
   return idx;
 }
 
@@ -601,13 +602,13 @@ function proposeBasicSystem(supports, n) {
   return releases;
 }
 
-// Wszystkie aktywne więzy jako płaska lista [{node, dof, label, constraint}, …]
+// Wszystkie aktywne więzy podporowe jako płaska lista kandydatów [{kind:'support', node, dof, label, constraint}, …]
 function getAllConstraints(supports) {
   const items = [];
   for (const sup of supports) {
-    if (sup.ry) items.push({node:sup.node, dof:'ry', label:`My w ${sup.node}`, constraint:`obrót θy w węźle ${sup.node}`});
-    if (sup.rx) items.push({node:sup.node, dof:'rx', label:`Mx w ${sup.node}`, constraint:`obrót θx w węźle ${sup.node}`});
-    if (sup.z)  items.push({node:sup.node, dof:'z',  label:`Rz w ${sup.node}`, constraint:`ugięcie w w węźle ${sup.node}`});
+    if (sup.ry) items.push({kind:'support', node:sup.node, dof:'ry', label:`My w ${sup.node}`, constraint:`obrót θy w węźle ${sup.node}`});
+    if (sup.rx) items.push({kind:'support', node:sup.node, dof:'rx', label:`Mx w ${sup.node}`, constraint:`obrót θx w węźle ${sup.node}`});
+    if (sup.z)  items.push({kind:'support', node:sup.node, dof:'z',  label:`Rz w ${sup.node}`, constraint:`ugięcie w w węźle ${sup.node}`});
   }
   return items;
 }
@@ -621,6 +622,64 @@ function enumerateCombinations(arr, k) {
     ...enumerateCombinations(rest, k - 1).map(c => [first, ...c]),
     ...enumerateCombinations(rest, k),
   ];
+}
+
+// Mosty grafu węzły/pręty (algorytm Tarjana, DFS). Porównanie po id pręta (nie po węźle
+// sąsiada), żeby bezpiecznie obsłużyć pręty równoległe między tą samą parą węzłów.
+// Pręt będący mostem rozłącza konstrukcję, jeśli go usunąć — nie jest kandydatem do rozcięcia
+// wewnętrznego (rozcięcie tam nie redukuje redundancji, tylko tworzy mechanizm/odcięty fragment).
+function findBridgeElements(nodes, elements) {
+  const adj = {};
+  nodes.forEach(n => { adj[n.id] = []; });
+  elements.forEach(el => {
+    if (!adj[el.n1] || !adj[el.n2]) return;
+    adj[el.n1].push({to: el.n2, elId: el.id});
+    adj[el.n2].push({to: el.n1, elId: el.id});
+  });
+  const visited = new Set(), disc = {}, low = {};
+  const bridges = new Set();
+  let timer = 0;
+  function dfs(u, parentElId) {
+    visited.add(u); disc[u] = low[u] = timer++;
+    for (const {to: v, elId} of adj[u] || []) {
+      if (elId === parentElId) continue;
+      if (!visited.has(v)) {
+        dfs(v, elId);
+        low[u] = Math.min(low[u], low[v]);
+        if (low[v] > disc[u]) bridges.add(elId);
+      } else {
+        low[u] = Math.min(low[u], disc[v]);
+      }
+    }
+  }
+  nodes.forEach(n => { if (!visited.has(n.id)) dfs(n.id, null); });
+  return bridges;
+}
+
+// Kandydaci do rozcięcia wewnętrznego: dla każdego pręta NIE będącego mostem (czyli leżącego na
+// jakimś obwodzie zamknniętym), na każdym końcu, każdy z trzech niezależnych typów zwolnienia
+// (Mg = moment gnący, Ms = moment skrętny, T = siła tnąca/ciągłość przemieszczenia w).
+const INTERNAL_REL_TYPES = [
+  {key:'mg', label:'Mg', desc:'momentu gnącego'},
+  {key:'ms', label:'Ms', desc:'momentu skrętnego'},
+  {key:'v',  label:'T',  desc:'siły tnącej'},
+];
+function getInternalReleaseCandidates(nodes, elements) {
+  const bridges = findBridgeElements(nodes, elements);
+  const items = [];
+  elements.forEach(el => {
+    if (bridges.has(el.id)) return;
+    [['release1', el.n1], ['release2', el.n2]].forEach(([relKey, node]) => {
+      INTERNAL_REL_TYPES.forEach(r => {
+        items.push({
+          kind: 'internal', elementId: el.id, relKey, relType: r.key, node,
+          label: `${r.label} w pręcie ${el.id} (węzeł ${node})`,
+          constraint: `${r.desc} w pręcie ${el.id}, koniec ${node}`,
+        });
+      });
+    });
+  });
+  return items;
 }
 
 // Sprawdza geometryczną niezmienność układu podstawowego (po zwolnieniu więzów), UWZGLĘDNIAJĄC
@@ -639,29 +698,63 @@ function isGeometricallyStable(remainingSupports, nodes, elements) {
   }
 }
 
-// Enumeruje wszystkie geometrycznie niezmienne układy podstawowe dla n zwolnień.
-// Zwraca {valid: [{removed:[…], remaining:[…]}, …], total: N}
-function enumerateBasicSystems(supports, nodes, elements, n) {
+// Buduje tymczasowy model (kopie, nie dotyka realnego stanu aplikacji) z naniesioną kombinacją
+// zwolnień — mieszanką wpisów podporowych (`kind:'support'`) i rozcięć wewnętrznych (`kind:'internal'`).
+function applyComboToModel(supports, elements, combo) {
+  const newSupports = supports.map(s => ({...s}));
+  const newElements = elements.map(el => ({
+    ...el,
+    release1: el.release1 ? {...el.release1} : undefined,
+    release2: el.release2 ? {...el.release2} : undefined,
+  }));
+  combo.forEach(rc => {
+    if (rc.kind === 'internal') {
+      const el = newElements.find(e => e.id === rc.elementId);
+      if (!el) return;
+      const cur = el[rc.relKey] || {mg:false, ms:false, v:false};
+      el[rc.relKey] = {...cur, [rc.relType]: true};
+    } else {
+      const idx = newSupports.findIndex(s => s.node === rc.node);
+      if (idx !== -1) newSupports[idx] = {...newSupports[idx], [rc.dof]: false};
+    }
+  });
+  return {supports: newSupports.filter(s => s.z || s.rx || s.ry), elements: newElements};
+}
+
+// "Logiczność" kombinacji do sortowania: czysto podporowe są najprostsze pedagogicznie (0),
+// każde dodatkowe rozcięcie wewnętrzne dopłaca punkty, a wśród rozcięć Mg < Ms < T.
+function comboScore(combo) {
+  let score = 0;
+  for (const rc of combo) {
+    if (rc.kind !== 'internal') continue;
+    score += 10 + (rc.relType === 'mg' ? 0 : rc.relType === 'ms' ? 1 : 2);
+  }
+  return score;
+}
+
+// Enumeruje kombinacje n zwolnień (podpory ∪ rozcięcia wewnętrzne w obwodach zamknniętych),
+// testuje stabilność realnym złożeniem/rozwiązaniem (isGeometricallyStable) i zwraca maksymalnie
+// `maxResults` najbardziej "logicznych" (patrz comboScore).
+// Zwraca {valid: [{removed:[…]}, …], total: N}
+function enumerateBasicSystems(supports, nodes, elements, n, maxResults = 5) {
   if (n <= 0) return {valid: [], total: 0};
-  const allCons = getAllConstraints(supports);
-  const allCombos = enumerateCombinations(allCons, n);
-  const valid = [];
+  const pool = [...getAllConstraints(supports), ...getInternalReleaseCandidates(nodes, elements)];
+  const allCombos = enumerateCombinations(pool, n);
+  const scored = [];
   for (const combo of allCombos) {
-    const modified = supports.map(s => ({...s}));
-    combo.forEach(rc => {
-      const idx = modified.findIndex(s => s.node === rc.node);
-      if (idx !== -1) modified[idx] = {...modified[idx], [rc.dof]: false};
-    });
-    const remaining = modified.filter(s => s.z || s.rx || s.ry);
-    if (isGeometricallyStable(remaining, nodes, elements)) {
-      const removed = combo.map((rc, i) => ({
-        ...rc,
-        xi: 'X' + (XI_SUB[i] || (i+1)),
-        stateIdx: i + 1,
-      }));
-      valid.push({removed, remaining});
+    const {supports: tempSupports, elements: tempElements} = applyComboToModel(supports, elements, combo);
+    if (isGeometricallyStable(tempSupports, nodes, tempElements)) {
+      scored.push({combo, score: comboScore(combo)});
     }
   }
+  scored.sort((a, b) => a.score - b.score);
+  const valid = scored.slice(0, maxResults).map(({combo}) => ({
+    removed: combo.map((rc, i) => ({
+      ...rc,
+      xi: 'X' + (XI_SUB[i] || (i+1)),
+      stateIdx: i + 1,
+    })),
+  }));
   return {valid, total: allCombos.length};
 }
 
@@ -1494,9 +1587,9 @@ function releaseKey(r) {
   return r.mg ? 'mg' : 'ms';
 }
 // Symbol przegubu na schemacie: otwarte kółko przy końcu pręta, z podpisem zwalnianej składowej.
-function HingeMark({x, y, mg, ms, size=5, color='#d97706'}) {
-  if (!mg && !ms) return null;
-  const label = mg && ms ? 'g,s' : mg ? 'g' : 's';
+function HingeMark({x, y, mg, ms, v, size=5, color='#d97706'}) {
+  if (!mg && !ms && !v) return null;
+  const label = [mg && 'g', ms && 's', v && 'T'].filter(Boolean).join(',');
   return (
     <g>
       <circle cx={x} cy={y} r={size} fill="#fff" stroke={color} strokeWidth="1.6"/>
@@ -1516,7 +1609,7 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
   const ty = y => height/2 - sc*(y-(ymin+ymax)/2);
   const supMap = {};
   supports.forEach(s => { supMap[s.node] = s; });
-  const removedSet = new Set(removedConstraints.map(r => `${r.node}:${r.dof}`));
+  const removedSet = new Set(removedConstraints.filter(r => r.kind !== 'internal').map(r => `${r.node}:${r.dof}`));
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
          style={{background:'#f7f5ed', borderRadius:'4px', border:'1px solid #c9d6e3'}}>
@@ -1563,9 +1656,23 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
         const px = tx(parseFloat(nd.x)||0), py = ty(parseFloat(nd.y)||0);
         const colors = ['#7c3aed','#db2777','#d97706'];
         const color = colors[i] || '#e11d48';
+        if (rc.kind === 'internal') {
+          // Wiele rozcięć wewnętrznych w tym samym węźle (np. dwa różne pręty kończące się w
+          // tym samym punkcie): rozstrzelamy promieniście, żeby kółka się nie pokrywały.
+          const sameNodeInternal = removedConstraints.filter(r => r.node === rc.node && r.kind === 'internal');
+          const localIdx = sameNodeInternal.indexOf(rc);
+          const off = localIdx * 11;
+          const ox = px + 9 + off * 0.6, oy = py - 9 - off * 0.6;
+          return (
+            <g key={`xi${i}`}>
+              <HingeMark x={ox} y={oy} mg={rc.relType==='mg'} ms={rc.relType==='ms'} v={rc.relType==='v'} size={5} color={color}/>
+              <text x={ox+8} y={oy+3} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>
+            </g>
+          );
+        }
         // Wiele zwolnionych więzów w tym samym węźle: siły rozstrzelamy kątowo, momenty —
         // koncentrycznie (różne radiusy), żeby łuki się nie pokrywały wizualnie.
-        const sameNode = removedConstraints.filter(r => r.node === rc.node);
+        const sameNode = removedConstraints.filter(r => r.node === rc.node && r.kind !== 'internal');
         const sameNodeForces = sameNode.filter(r => r.dof === 'z');
         const sameNodeMoments = sameNode.filter(r => r.dof !== 'z');
         const arrowLen = Math.min(width, height) * 0.22;
@@ -1655,6 +1762,7 @@ function App() {
   // Przepływ etapowy
   const [appStage, setAppStage] = useState(1);
   const [basicSystemOptions, setBSOptions] = useState([]);
+  const [bsTotalChecked, setBsTotalChecked] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
 
   // Wiersze podpór wymuszone na "Własna" (checkboxy), nawet gdy aktualna kombinacja
@@ -1741,16 +1849,20 @@ function App() {
     }
     const {valid, total} = enumerateBasicSystems(supports, nodes, elements, info.n);
     if (valid.length === 0) {
-      setError(`Brak geometrycznie niezmiennych układów podstawowych (sprawdzono ${total} kombinacji). Sprawdź podpory i przeguby.`);
+      setError(`Brak geometrycznie niezmiennych układów podstawowych (sprawdzono ${total} kombinacji, w tym rozcięcia wewnętrzne). Sprawdź podpory i przeguby.`);
       return;
     }
-    setBSOptions(valid); setSelectedOption(0); setAppStage(2);
+    setBSOptions(valid); setBsTotalChecked(total); setSelectedOption(0); setAppStage(2);
   }, [nodes, elements, supports, statesData]);
 
   const goToStage3 = useCallback(() => {
     if (selectedOption === null || !basicSystemOptions[selectedOption]) return;
     setError(null);
     const combo = basicSystemOptions[selectedOption];
+    if (combo.removed.some(rc => rc.kind === 'internal')) {
+      setError('Ta opcja zawiera rozcięcie wewnętrzne (Mg/Ms/T w pręcie) — pełne przeliczenie stanów jednostkowych dla takich rozcięć będzie dostępne w kolejnym kroku. Wybierz opcję bez rozcięć wewnętrznych, aby przejść dalej teraz.');
+      return;
+    }
     const newSupports = supports.map(s => ({...s}));
     combo.removed.forEach(rc => {
       const idx = newSupports.findIndex(s => s.node === rc.node);
@@ -1821,10 +1933,10 @@ function App() {
       const gj = parseFloat(firstEl.GJ) || 1;
       setEjGcRatioState(ei / gj);
     }
-    setActiveState(0); setAppStage(1); setBSOptions([]); setSelectedOption(null);
+    setActiveState(0); setAppStage(1); setBSOptions([]); setBsTotalChecked(0); setSelectedOption(null);
     setResults(null); setError(null); setViewMode('structure'); resetView();
   };
-  const reset = () => { setNodes([]); setElements([]); setSupports([]); setStatesData([{loads:[], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}}]); setActiveState(0); setResults(null); setError(null); setViewMode('structure'); resetView(); setAppStage(1); setBSOptions([]); setSelectedOption(null); };
+  const reset = () => { setNodes([]); setElements([]); setSupports([]); setStatesData([{loads:[], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}}]); setActiveState(0); setResults(null); setError(null); setViewMode('structure'); resetView(); setAppStage(1); setBSOptions([]); setBsTotalChecked(0); setSelectedOption(null); };
   const addNode = () => { setNodes([...nodes, {id: String.fromCharCode(65+nodes.length), x:0, y:0}]); };
   const updateNode = (i,k,v) => { const n=[...nodes]; n[i]={...n[i],[k]:v}; setNodes(n); };
   const removeNode = (i) => {
@@ -2034,19 +2146,35 @@ function App() {
                 )}
                 {staticInfo && <span className="text-[10px] font-mono text-slate-500">3·{staticInfo.m} + {staticInfo.r} − 3·{staticInfo.w}{staticInfo.h ? ` − ${staticInfo.h}` : ''} = {staticInfo.n}</span>}
               </div>
-              <div className="mt-1 text-[11px] text-slate-400">Wybierz zestaw więzów do zwolnienia. Stany jednostkowe zostaną wypełnione automatycznie.</div>
+              <div className="mt-1 text-[11px] text-slate-400">Inteligentny generator: pula obejmuje podpory ORAZ rozcięcia wewnętrzne (Mg/Ms/T) na prętach w obwodach zamkniętych. Pokazano do 5 najbardziej logicznych, stabilnych propozycji.</div>
             </div>
             <div className="p-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'420px'}}>
-              {basicSystemOptions.map((opt, idx) => (
-                <label key={idx} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedOption===idx ? 'border-cyan-600/60 bg-cyan-950/20 ring-1 ring-cyan-600/30' : 'border-slate-700/50 bg-slate-900/30 hover:border-slate-600'}`}>
+              {basicSystemOptions.map((opt, idx) => {
+                const hasInternal = opt.removed.some(rc => rc.kind === 'internal');
+                return (
+                <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${selectedOption===idx ? 'border-cyan-600/60 bg-cyan-950/20 ring-1 ring-cyan-600/30' : 'border-slate-700/50 bg-slate-900/30 hover:border-slate-600'}`}>
                   <input type="radio" name="basicSystem" checked={selectedOption===idx} onChange={()=>setSelectedOption(idx)} className="mt-1 accent-cyan-400 flex-shrink-0"/>
                   <div className="flex items-start gap-3 flex-1 min-w-0 flex-wrap">
                     <div className="flex-1 min-w-0">
-                      <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Zwolnij {opt.removed.length} więz{opt.removed.length===1?'':opt.removed.length<5?'y':'ów'}:</div>
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-2">
+                        <span>Opcja {idx+1} — zwolnij {opt.removed.length} więz{opt.removed.length===1?'':opt.removed.length<5?'y':'ów'}:</span>
+                        {hasInternal && <span className="text-amber-600 normal-case font-semibold">zawiera rozcięcie wewnętrzne</span>}
+                      </div>
                       <div className="space-y-1.5">
                         {opt.removed.map((rc, i) => {
                           const colors = ['text-violet-300','text-pink-300','text-amber-300'];
                           const bgs = ['bg-violet-950/40 ring-violet-700/40','bg-pink-950/40 ring-pink-700/40','bg-amber-950/40 ring-amber-700/40'];
+                          if (rc.kind === 'internal') {
+                            return (
+                              <div key={i} className="text-sm font-mono leading-snug">
+                                <span className={`font-bold ${colors[i]||'text-slate-300'}`}>{rc.xi}</span>
+                                <span className="text-slate-400"> = rozcięcie {rc.constraint}</span>
+                                <div className={`inline-block ml-2 text-[10px] px-1.5 py-px rounded ring-1 ${bgs[i]||'bg-slate-800 ring-slate-700'} ${colors[i]||'text-slate-400'}`}>
+                                  Stan {rc.stateIdx}: stan jednostkowy — do uzupełnienia w kolejnym kroku
+                                </div>
+                              </div>
+                            );
+                          }
                           return (
                             <div key={i} className="text-sm font-mono leading-snug">
                               <span className={`font-bold ${colors[i]||'text-slate-300'}`}>{rc.xi}</span>
@@ -2058,16 +2186,20 @@ function App() {
                           );
                         })}
                       </div>
+                      <button onClick={()=>setSelectedOption(idx)} className={`mt-2 text-[11px] px-2.5 py-1 rounded font-semibold transition-colors ${selectedOption===idx ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                        {selectedOption===idx ? '✓ Wybrano ten układ' : 'Wybierz ten układ'}
+                      </button>
                     </div>
                   </div>
-                </label>
-              ))}
+                </div>
+                );
+              })}
             </div>
             {staticInfo && staticInfo.n > 2 && (
               <div className="px-4 pb-3 text-[11px] text-rose-400">⚠ n &gt; 2 — interfejs obsługuje do n = 2. Zostaną wypełnione tylko X₁ i X₂.</div>
             )}
             <div className="border-t border-slate-800 px-4 py-2 flex items-center gap-2 text-[10px] text-slate-500">
-              <span>{basicSystemOptions.length} z {basicSystemOptions.length > 0 ? '?' : '0'} kombinacji geometrycznie niezmiennych</span>
+              <span>Pokazano {basicSystemOptions.length} najlepszych z {bsTotalChecked} sprawdzonych kombinacji (podpory + rozcięcia wewnętrzne)</span>
               <button onClick={() => setAppStage(1)} className="ml-auto text-slate-500 hover:text-cyan-300 px-2 py-1 rounded hover:bg-slate-800">← Wróć do schematu</button>
             </div>
           </div>
@@ -2197,7 +2329,7 @@ function App() {
         <div className="bg-white border border-slate-800 rounded-lg overflow-hidden no-print">
           <div className="border-b border-slate-800 px-4 py-3 bg-white">
             <span className="text-amber-300 font-bold text-sm">Wybrany układ podstawowy</span>
-            <div className="mt-1 text-[11px] text-slate-400">Strzałka prosta = siła (X = Fz), strzałka łukowa = moment (X = Mx/My), w założonym dodatnim kierunku.</div>
+            <div className="mt-1 text-[11px] text-slate-400">Strzałka prosta = siła (X = Fz), strzałka łukowa = moment (X = Mx/My); kółko z literą = rozcięcie wewnętrzne pręta (g=Mg, s=Ms, T=siła tnąca).</div>
           </div>
           <div className="p-4 flex items-center justify-center" style={{minHeight:'360px'}}>
             {selectedOption !== null && basicSystemOptions[selectedOption] ? (

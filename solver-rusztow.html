@@ -1481,8 +1481,8 @@ function SupportPresetIcon({dof, size=34, color='#0891b2'}) {
     <svg width={size} height={size} viewBox="0 0 34 34">
       <circle cx={cx} cy={cy} r="2.5" fill="#fff" stroke={color} strokeWidth="1.2"/>
       {dof.z && <ForceArrow x={cx} y={cy} angle={0} length={14} color={color}/>}
-      {dof.rx && <MomentArrow x={cx} y={cy} radius={dof.z?9:7} angle={dof.z?-40:0} color={color}/>}
-      {dof.ry && <MomentArrow x={cx} y={cy} radius={dof.z?9:7} angle={dof.z?(dof.rx?140:-40):0} color={color} ccw/>}
+      {dof.rx && <MomentArrow x={cx} y={cy} radius={dof.z?8:7} angle={-45} color={color}/>}
+      {dof.ry && <MomentArrow x={cx} y={cy} radius={dof.z?(dof.rx?12:8):7} angle={-45} color={color} ccw/>}
     </svg>
   );
 }
@@ -2154,7 +2154,7 @@ function App() {
                         const key = e.target.value;
                         const p = SUPPORT_PRESETS.find(p => p.key === key);
                         if (p && p.dof) {
-                          updateSupport(i,'z',p.dof.z); updateSupport(i,'rx',p.dof.rx); updateSupport(i,'ry',p.dof.ry);
+                          setSupports(prev => prev.map((s, idx) => idx===i ? {...s, z:p.dof.z, rx:p.dof.rx, ry:p.dof.ry} : s));
                           setForceCustomSupport(prev => { const next = {...prev}; delete next[i]; return next; });
                         } else {
                           setForceCustomSupport(prev => ({...prev, [i]: true}));

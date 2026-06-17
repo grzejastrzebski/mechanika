@@ -1253,7 +1253,7 @@ function MiniDiagram({M1, M2, q, L, color='#0891b2', suffix='', title=''}) {
     }
   }
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-slate-950/60 rounded">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-white rounded">
       <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#16243a" strokeWidth="1.5"/>
       <polygon points={polyStr} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
       <line x1={pad} y1={baseY} x2={pad} y2={baseY - M1*yScale} stroke={color} strokeWidth="1"/>
@@ -1278,7 +1278,7 @@ function MiniRect({T, L, color='#ea580c', suffix='', title=''}) {
   const yScale = (h*0.3) / maxAbs;
   const top = baseY - T*yScale;
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-slate-950/60 rounded">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-white rounded">
       <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#16243a" strokeWidth="1.5"/>
       {Math.abs(T) > 1e-9 && <>
         <rect x={pad} y={Math.min(baseY, top)} width={w-2*pad} height={Math.abs(top-baseY)} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
@@ -1315,7 +1315,7 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
     const colorMz0 = '#0891b2', colorMz1 = '#7c3aed';
     const colorMs0 = '#ea580c', colorMs1 = '#db2777';
     return (
-      <div key={`b${idx}`} className="bg-slate-900/60 rounded-lg p-3 border border-slate-800">
+      <div key={`b${idx}`} className="bg-white rounded-lg p-3 border border-slate-800">
         <div className="text-[11px] font-mono text-slate-300 mb-2">
           <span className="text-cyan-300 font-semibold">Pręt {b.el.id}</span> ({b.el.n1}→{b.el.n2}, s = {fmt(b.L,2)}{sufL})
           <span className="text-slate-500 ml-2">EJ={fmt(b.EI,2)}, GC={fmt(b.GJ,2)}</span>
@@ -1948,7 +1948,7 @@ function App() {
 
   return (
     <div className="min-h-screen text-slate-100" style={{fontFamily:'ui-sans-serif, system-ui, sans-serif'}}>
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-10 no-print">
+      <header className="border-b border-slate-800 bg-white sticky top-0 z-10 no-print">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-cyan-500/10 border border-cyan-500/30 rounded flex items-center justify-center">
@@ -1978,7 +1978,7 @@ function App() {
         </div>
       </header>
 
-      {showHelp && <div className="bg-slate-900/40 border-b border-slate-800 no-print"><div className="max-w-7xl mx-auto px-6 py-4 text-sm text-slate-300 space-y-2">
+      {showHelp && <div className="bg-white border-b border-slate-800 no-print"><div className="max-w-7xl mx-auto px-6 py-4 text-sm text-slate-300 space-y-2">
         <p><span className="text-cyan-400 font-semibold">Konwencja:</span> ruszt w płaszczyźnie xy, z prostopadle.</p>
         <p><span className="text-cyan-400 font-semibold">DOF:</span> w (z), θx, θy. Utwierdzenie = wszystkie 3, podpora przegubowa = tylko z.</p>
         <p><span className="text-cyan-400 font-semibold">Obciążenia:</span> Fz ujemne = w dół (siła węzłowa). q ciągłe na pręcie – kolumna <code className="text-amber-400">q</code> w tabeli prętów (ujemna = w dół).</p>
@@ -1988,7 +1988,7 @@ function App() {
       </div></div>}
 
       <div className="max-w-7xl mx-auto px-6 pt-4 no-print">
-        <div className="bg-slate-900/40 border border-slate-800 rounded-lg px-4 py-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <div className="bg-white border border-slate-800 rounded-lg px-4 py-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
           <span className="text-[10px] uppercase tracking-wider text-slate-500">Wyświetlanie:</span>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className={checkCell} checked={symbolic.enabled} onChange={e => setSymbolic({...symbolic, enabled: e.target.checked})}/>
@@ -2029,8 +2029,8 @@ function App() {
 
         {/* ── Etap 2: picker układu podstawowego ── */}
         {appStage === 2 ? (
-          <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden no-print">
-            <div className="border-b border-slate-800 px-4 py-3 bg-slate-900/60">
+          <div className="bg-white border border-slate-800 rounded-lg overflow-hidden no-print">
+            <div className="border-b border-slate-800 px-4 py-3 bg-white">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-amber-300 font-bold text-sm">Etap 2 — Wybór układu podstawowego</span>
                 {staticInfo && (
@@ -2079,8 +2079,8 @@ function App() {
           </div>
         ) : (
         /* ── Etap 1 / 3: edytor danych ── */
-        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden no-print">
-          <div className="border-b border-slate-800 px-3 py-2 bg-slate-900/60 flex items-center gap-2">
+        <div className="bg-white border border-slate-800 rounded-lg overflow-hidden no-print">
+          <div className="border-b border-slate-800 px-3 py-2 bg-white flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-slate-500">Stan:</span>
             <button onClick={()=>setActiveState(0)} className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${activeState===0?'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40':'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Stan 0 (obciążenia rzeczywiste)</button>
             <>
@@ -2091,7 +2091,7 @@ function App() {
               <span className={`ml-auto text-[10px] font-mono px-2 py-0.5 rounded ring-1 ${staticInfo.n < 0 ? 'text-orange-300 ring-orange-700/50 bg-orange-950/30' : staticInfo.n === 0 ? 'text-emerald-400 ring-emerald-700/50 bg-emerald-950/30' : staticInfo.n <= 2 ? 'text-amber-300 ring-amber-700/50 bg-amber-950/30' : 'text-rose-400 ring-rose-700/50 bg-rose-950/30'}`}>n = {staticInfo.n}</span>
             )}
           </div>
-          <div className="border-b border-slate-800 flex bg-slate-900/60 overflow-x-auto">
+          <div className="border-b border-slate-800 flex bg-white overflow-x-auto">
             <button className={tabBtn(activeTab==='nodes')} onClick={()=>setActiveTab('nodes')}>Węzły · {nodes.length}</button>
             <button className={tabBtn(activeTab==='elements')} onClick={()=>setActiveTab('elements')}>Pręty · {elements.length}</button>
             <button className={tabBtn(activeTab==='supports')} onClick={()=>setActiveTab('supports')}>Podpory · {supports.length}</button>
@@ -2200,8 +2200,8 @@ function App() {
         )}
 
         {appStage === 2 ? (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden no-print">
-          <div className="border-b border-slate-800 px-4 py-3 bg-slate-900/60">
+        <div className="bg-white border border-slate-800 rounded-lg overflow-hidden no-print">
+          <div className="border-b border-slate-800 px-4 py-3 bg-white">
             <span className="text-amber-300 font-bold text-sm">Wybrany układ podstawowy</span>
             <div className="mt-1 text-[11px] text-slate-400">Strzałka prosta = siła (X = Fz), strzałka łukowa = moment (X = Mx/My), w założonym dodatnim kierunku.</div>
           </div>
@@ -2212,8 +2212,8 @@ function App() {
           </div>
         </div>
         ) : (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden">
-          <div className="border-b border-slate-800 flex items-center bg-slate-900/60 no-print flex-wrap">
+        <div className="bg-white border border-slate-800 rounded-lg overflow-hidden">
+          <div className="border-b border-slate-800 flex items-center bg-white no-print flex-wrap">
             <button onClick={()=>setViewMode('structure')} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='structure'?'text-slate-200 border-slate-400':'text-slate-500 border-transparent hover:text-slate-300'}`}><Eye size={12}/> Schemat</button>
             <button onClick={()=>setViewMode('mz')} disabled={!results} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='mz'?'text-cyan-300 border-cyan-400':'text-slate-500 border-transparent hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed'}`}><BarChart3 size={12}/> Mz {activeState===0?'(St.0)':activeState===1?'(St.1)':'(St.2)'}</button>
             <button onClick={()=>setViewMode('ms')} disabled={!results} className={`px-3 py-2.5 text-xs font-medium tracking-wide uppercase transition-colors flex items-center gap-1.5 border-b-2 ${viewMode==='ms'?'text-orange-300 border-orange-400':'text-slate-500 border-transparent hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed'}`}><Activity size={12}/> Ms {activeState===0?'(St.0)':activeState===1?'(St.1)':'(St.2)'}</button>
@@ -2233,11 +2233,11 @@ function App() {
         )}
       </div>
 
-      {error && <div className="max-w-7xl mx-auto px-6 no-print"><div className="bg-rose-950/40 border border-rose-900 rounded-lg px-4 py-3 text-sm text-rose-200">{error}</div></div>}
+      {error && <div className="max-w-7xl mx-auto px-6 no-print"><div className="bg-rose-950 border border-rose-900 rounded-lg px-4 py-3 text-sm text-rose-200">{error}</div></div>}
 
       {appStage === 3 && results && <div className="max-w-7xl mx-auto px-6 pb-10 space-y-4">
 
-        {results.deltas && <div className="bg-emerald-950/30 border border-emerald-800/50 rounded-lg p-4">
+        {results.deltas && <div className="bg-emerald-950 border border-emerald-800/50 rounded-lg p-4">
           <div className="text-xs uppercase tracking-wider text-emerald-300 mb-3 font-semibold flex items-center gap-3 flex-wrap">
             <span>Wereszczagin · Metoda sił {results.deltas.has2 && <span className="text-[10px] normal-case tracking-normal text-emerald-400/70">(układ 2× niewyznaczalny)</span>}</span>
             <span className="bg-amber-950/40 border border-amber-700/40 rounded px-2 py-0.5 normal-case tracking-normal text-amber-200 font-mono text-xs">EJ/GC = {fmt(ejGcRatio, 2)}</span>
@@ -2284,8 +2284,8 @@ function App() {
           {wereszczaginShow && <WereshchaginPanel deltas={results.deltas} pairKey={wereszczaginShow} label={`Rozkład per pręt: δ${wereszczaginShow.split('').map(c => c==='0'?'₀':c==='1'?'₁':'₂').join('')}`} sym={sym}/>}
         </div>}
 
-        <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden">
-          <div className="border-b border-slate-800 flex items-center bg-slate-900/60 no-print">
+        <div className="bg-white border border-slate-800 rounded-lg overflow-hidden">
+          <div className="border-b border-slate-800 flex items-center bg-white no-print">
             <button className={tabBtn(resultsTab==='forces')} onClick={()=>setResultsTab('forces')}>Siły wewnętrzne</button>
             <button className={tabBtn(resultsTab==='reactions')} onClick={()=>setResultsTab('reactions')}>Reakcje</button>
             <button className={tabBtn(resultsTab==='displacements')} onClick={()=>setResultsTab('displacements')}>Przemieszczenia</button>

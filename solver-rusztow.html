@@ -73,6 +73,7 @@
     background-size: 22px 22px;
   }
   @media print {
+    @page { size: A4; margin: 15mm; }
     body { background: white; background-image: none; }
     .no-print { display: none !important; }
     svg { background: white !important; }
@@ -506,6 +507,49 @@ function productSufInline(s0, s1, sym) {
   if (!f0 || !f1) return '';
   // Iloczyn dwóch wykresów scałkowany po długości: jednostka = f0·f1·L
   return formatUnit(f0.P + f1.P, f0.Q + f1.Q, f0.L + f1.L + 1);
+}
+// Sufiks symboliczny dla wartości danego typu (kind) w danym stanie (stateIdx) — wersja
+// niezależna od stanu App (przyjmuje `sym` jako argument), żeby mogły z niej korzystać też
+// komponenty poza App (np. PrintReport). App.symSuffix/symFmt są tylko tankimi nakładkami.
+function computeSymSuffix(sym, kind, stateIdx, stateIdx2) {
+  if (!sym || !sym.enabled) return '';
+  const f = factorForType(sym.types[stateIdx]);
+  if (!f) return '';
+  if (kind === 'M' || kind === 'Mz' || kind === 'Ms') {
+    const u = formatUnit(f.P, f.Q, f.L);
+    return u ? ' ' + u : '';
+  }
+  if (kind === 'V' || kind === 'Rz') {
+    const u = formatUnit(f.P, f.Q, Math.max(f.L - 1, 0));
+    return u ? ' ' + u : '';
+  }
+  if (kind === 'Rm') {
+    const u = formatUnit(f.P, f.Q, f.L);
+    return u ? ' ' + u : '';
+  }
+  if (kind === 'w') return ' ' + formatUnit(f.P, f.Q, f.L + 2, true);
+  if (kind === 'th') return ' ' + formatUnit(f.P, f.Q, f.L + 1, true);
+  if (kind === 'd_self') return ' ' + formatUnit(2*f.P, 2*f.Q, 2*f.L + 1, true);
+  if (kind === 'd_cross') {
+    const f2 = factorForType(sym.types[stateIdx2]);
+    if (!f2) return '';
+    return ' ' + formatUnit(f.P + f2.P, f.Q + f2.Q, f.L + f2.L + 1, true);
+  }
+  if (kind === 'X') {
+    const f0 = factorForType(sym.types[0]);
+    if (!f0) return '';
+    const Pp = f0.P - f.P, Qp = f0.Q - f.Q, Lp = f0.L - f.L;
+    if (Pp < 0 || Qp < 0 || Lp < 0) return '';
+    const u = formatUnit(Pp, Qp, Lp);
+    return u ? ' ' + u : '';
+  }
+  return '';
+}
+function computeSymFmt(sym, val, kind, decimals=2, stateIdx, stateIdx2) {
+  const numStr = fmt(val, decimals);
+  if (numStr === '—' || numStr === '0') return numStr;
+  const sfx = computeSymSuffix(sym, kind, stateIdx, stateIdx2);
+  return sfx ? `${numStr}${sfx}` : numStr;
 }
 
 // Generuje opis i numeryczną postać wzoru iloczynu dwóch wykresów (Wereszczagin).
@@ -1830,6 +1874,155 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
   );
 }
 
+const PRINT_VIEW = { zoom: 1, panX: 0, panY: 0, yaw: 0, pitch: Math.PI/6 };
+const noopSetView = () => {};
+
+// Czysty, akademicki raport do druku (zob. App: osadzony w `hidden print:block`, na żywym
+// interfejsie jest schowany przez `print:hidden`). Kolejność sekcji odwzorowuje ręczne
+// rozwiązanie metodą sił: schemat -> stopień niewyznaczalności -> układ podstawowy ->
+// stany 1/2/0 -> rozwinięte całki Wereszczagina (bez akordeonów) -> układ równań i wynik.
+function PrintReport({nodes, elements, supports, staticInfo, basicSystemOptions, selectedOption, results, sym, statesData, ejGcRatio}) {
+  const elementsFor = (stateIdx) => elements.map(el => ({...el, q: parseFloat(statesData[stateIdx]?.elementQ?.[el.id]) || 0}));
+  const loadsFor = (stateIdx) => statesData[stateIdx]?.loads || [];
+  const momentSufFor = (stateIdx) => computeSymSuffix(sym, 'M', stateIdx) || '';
+  const deltas = results.deltas;
+  const has2 = !!deltas?.has2;
+  const basicCombo = (selectedOption !== null && basicSystemOptions[selectedOption]) ? basicSystemOptions[selectedOption] : null;
+
+  const StateDiagrams = ({stateIdx, stateLabel, stateResult}) => !stateResult ? null : (
+    <section className="print:break-inside-avoid mb-6">
+      <h3 className="text-base font-bold mb-2 border-b border-slate-300 pb-1">{stateLabel}</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="text-xs font-semibold mb-1 text-slate-600">Wykres Mz</div>
+          <div className="aspect-[19/13] border border-slate-300">
+            <StructureView nodes={nodes} elements={elementsFor(stateIdx)} supports={supports} loads={loadsFor(stateIdx)}
+              results={{elementForces: stateResult.elementForces}} viewMode="mz" view={PRINT_VIEW} setView={noopSetView}
+              momentSuffix={momentSufFor(stateIdx)}/>
+          </div>
+        </div>
+        <div>
+          <div className="text-xs font-semibold mb-1 text-slate-600">Wykres Ms</div>
+          <div className="aspect-[19/13] border border-slate-300">
+            <StructureView nodes={nodes} elements={elementsFor(stateIdx)} supports={supports} loads={loadsFor(stateIdx)}
+              results={{elementForces: stateResult.elementForces}} viewMode="ms" view={PRINT_VIEW} setView={noopSetView}
+              momentSuffix={momentSufFor(stateIdx)}/>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  return (
+    <div className="max-w-[190mm] mx-auto p-6 font-sans text-slate-100">
+      <h1 className="text-xl font-bold mb-1">Raport obliczeń — Solver Rusztów MES</h1>
+      <p className="text-xs text-slate-500 mb-6">Metoda sił — rozwiązanie krok po kroku · {new Date().toLocaleDateString('pl-PL')}</p>
+
+      <section className="print:break-inside-avoid mb-6">
+        <h2 className="text-lg font-bold mb-2 border-b border-slate-300 pb-1">1. Schemat ogólny</h2>
+        <div className="text-sm mb-2 space-y-0.5">
+          <div>EJ/GC = {fmt(ejGcRatio, 2)}</div>
+          {loadsFor(0).filter(l => Math.abs(parseFloat(l.Fz)||0)+Math.abs(parseFloat(l.Mx)||0)+Math.abs(parseFloat(l.My)||0) > 1e-9).map((l,i) => (
+            <div key={i}>Obciążenie w węźle {l.node}: Fz={fmt(parseFloat(l.Fz)||0,2)}, Mx={fmt(parseFloat(l.Mx)||0,2)}, My={fmt(parseFloat(l.My)||0,2)}</div>
+          ))}
+          {elementsFor(0).filter(el => Math.abs(el.q) > 1e-9).map((el,i) => (
+            <div key={i}>Obciążenie ciągłe na pręcie {el.id}: q={fmt(el.q,2)}</div>
+          ))}
+        </div>
+        <div className="aspect-[19/13] border border-slate-300" style={{maxWidth: '500px'}}>
+          <StructureView nodes={nodes} elements={elementsFor(0)} supports={supports} loads={loadsFor(0)}
+            results={null} viewMode="structure" view={PRINT_VIEW} setView={noopSetView} momentSuffix=""/>
+        </div>
+      </section>
+
+      {staticInfo && (() => {
+        // Do Etapu 3 `supports`/`elements` w App są już ZMODYFIKOWANE do wybranego układu
+        // podstawowego (goToStage3 usuwa więzy / dodaje przeguby), więc `staticInfo` liczone na
+        // bieżącym modelu opisuje już zredukowany (statycznie wyznaczalny) układ, nie oryginalny
+        // problem użytkownika. Odtwarzamy oryginalny stopień niewyznaczalności z `basicCombo`:
+        // każde zwolnione więzy podporowe zwiększa r, każdy dodany przegub wewnętrzny zmniejsza h.
+        const numRemoved = basicCombo ? basicCombo.removed.length : 0;
+        const numRemovedInternal = basicCombo ? basicCombo.removed.filter(rc => rc.kind === 'internal').length : 0;
+        const numRemovedSupport = numRemoved - numRemovedInternal;
+        const origR = staticInfo.r + numRemovedSupport;
+        const origH = staticInfo.h - numRemovedInternal;
+        const origN = staticInfo.n + numRemoved;
+        return (
+          <section className="print:break-inside-avoid mb-6">
+            <h2 className="text-lg font-bold mb-2 border-b border-slate-300 pb-1">2. Stopień statycznej niewyznaczalności</h2>
+            <p className="text-sm font-mono">
+              n = 3·m + r − 3·w − h = 3·{staticInfo.m} + {origR} − 3·{staticInfo.w}{origH ? ` − ${origH}` : ''} = {origN}
+            </p>
+            <p className="text-sm mt-1">
+              {origN === 0 ? 'Układ statycznie wyznaczalny.' : `Układ ${origN}-krotnie statycznie niewyznaczalny — metoda sił wymaga ${origN} równań kanonicznych.`}
+            </p>
+          </section>
+        );
+      })()}
+
+      {basicCombo && (
+        <section className="print:break-inside-avoid mb-6">
+          <h2 className="text-lg font-bold mb-2 border-b border-slate-300 pb-1">3. Układ podstawowy</h2>
+          <ul className="text-sm mb-2 list-disc pl-5">
+            {basicCombo.removed.map((rc,i) => <li key={i}>{rc.xi} = {rc.constraint}</li>)}
+          </ul>
+          <div style={{maxWidth:'500px'}}>
+            <MiniBasicSystem nodes={nodes} elements={elements} supports={supports} removedConstraints={basicCombo.removed} width={460} height={360}/>
+          </div>
+        </section>
+      )}
+
+      <StateDiagrams stateIdx={1} stateLabel="4. Stan 1 (X₁ = 1)" stateResult={results.state1}/>
+      {has2 && <StateDiagrams stateIdx={2} stateLabel="5. Stan 2 (X₂ = 1)" stateResult={results.state2}/>}
+      <StateDiagrams stateIdx={0} stateLabel={`${has2 ? '6' : '5'}. Stan 0 (obciążenia rzeczywiste)`} stateResult={results.state0}/>
+
+      {deltas && (
+        <section className="mb-6">
+          <h2 className="text-lg font-bold mb-2 border-b border-slate-300 pb-1">{has2 ? '7' : '6'}. Obliczenia całek Wereszczagina</h2>
+          <div className="space-y-3">
+            <WereshchaginPanel deltas={deltas} pairKey="11" label="Rozkład per pręt: δ11" sym={sym}/>
+            {has2 && <WereshchaginPanel deltas={deltas} pairKey="22" label="Rozkład per pręt: δ22" sym={sym}/>}
+            {has2 && <WereshchaginPanel deltas={deltas} pairKey="12" label="Rozkład per pręt: δ12" sym={sym}/>}
+            <WereshchaginPanel deltas={deltas} pairKey="10" label="Rozkład per pręt: δ10" sym={sym}/>
+            {has2 && <WereshchaginPanel deltas={deltas} pairKey="20" label="Rozkład per pręt: δ20" sym={sym}/>}
+            <WereshchaginPanel deltas={deltas} pairKey="00" label="Rozkład per pręt: δ00 (kontrola)" sym={sym}/>
+          </div>
+        </section>
+      )}
+
+      {deltas && (
+        <section className="print:break-inside-avoid mb-6">
+          <h2 className="text-lg font-bold mb-2 border-b border-slate-300 pb-1">{has2 ? '8' : '7'}. Układ równań i wyniki</h2>
+          {has2 ? (
+            <div className="space-y-2 text-sm font-mono">
+              <div className="grid grid-cols-3 gap-3">
+                <div><span className="text-slate-500">δ11</span> = {computeSymFmt(sym, deltas.delta11, 'd_self', 4, 1)}</div>
+                <div><span className="text-slate-500">δ12 = δ21</span> = {computeSymFmt(sym, deltas.delta12, 'd_cross', 4, 1, 2)}</div>
+                <div><span className="text-slate-500">δ22</span> = {computeSymFmt(sym, deltas.delta22, 'd_self', 4, 2)}</div>
+                <div><span className="text-slate-500">δ10</span> = {computeSymFmt(sym, deltas.delta10, 'd_cross', 4, 1, 0)}</div>
+                <div><span className="text-slate-500">δ20</span> = {computeSymFmt(sym, deltas.delta20, 'd_cross', 4, 2, 0)}</div>
+                <div><span className="text-slate-500">δ00 (kontrola)</span> = {fmt(deltas.delta00, 4)}</div>
+              </div>
+              <div>[δ11 δ12; δ12 δ22]·[X1; X2] = −[δ10; δ20]</div>
+              <div className="font-bold text-base">X1 = {computeSymFmt(sym, deltas.X1, 'X', 4, 1)}</div>
+              <div className="font-bold text-base">X2 = {computeSymFmt(sym, deltas.X2, 'X', 4, 2)}</div>
+              <div className="mt-1">Wykres końcowy: M = M0 + X1·M1 + X2·M2</div>
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm font-mono">
+              <div><span className="text-slate-500">δ11</span> = {computeSymFmt(sym, deltas.delta11, 'd_self', 4, 1)}</div>
+              <div><span className="text-slate-500">δ10</span> = {computeSymFmt(sym, deltas.delta10, 'd_cross', 4, 1, 0)}</div>
+              <div><span className="text-slate-500">δ00 (kontrola)</span> = {fmt(deltas.delta00, 4)}</div>
+              <div>X1 = −δ10 / δ11 = <span className="font-bold text-base">{computeSymFmt(sym, deltas.X1, 'X', 4, 1)}</span></div>
+              <div className="mt-1">Wykres końcowy: M = M0 + X1·M1</div>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [nodes, setNodes] = useState(EXAMPLES.zadanie.nodes);
   const [elements, setElements] = useState(EXAMPLES.zadanie.elements.map(el => { const {q, ...rest} = el; return rest; }));
@@ -1903,58 +2096,10 @@ function App() {
   // Wybór jednostek symbolicznych dla różnych typów wyników
   // Sufiks symboliczny dla wartości danego typu (kind) w danym stanie (stateIdx).
   // Dla par (d_cross) potrzebny też stateIdx2.
-  const symSuffix = (kind, stateIdx, stateIdx2) => {
-    if (!sym.enabled) return '';
-    const idx = (stateIdx === undefined || stateIdx === null) ? activeState : stateIdx;
-    const f = factorForType(sym.types[idx]);
-    if (!f) return '';
-    if (kind === 'M' || kind === 'Mz' || kind === 'Ms') {
-      const u = formatUnit(f.P, f.Q, f.L);
-      return u ? ' ' + u : '';
-    }
-    if (kind === 'V' || kind === 'Rz') {
-      // siła = M / L → odejmij 1 od L
-      const u = formatUnit(f.P, f.Q, Math.max(f.L - 1, 0));
-      return u ? ' ' + u : '';
-    }
-    if (kind === 'Rm') {
-      const u = formatUnit(f.P, f.Q, f.L);
-      return u ? ' ' + u : '';
-    }
-    if (kind === 'w') {
-      // przemieszczenie pionowe = M·L²/EJ → wymnóż przez L² i podziel przez EJ
-      return ' ' + formatUnit(f.P, f.Q, f.L + 2, true);
-    }
-    if (kind === 'th') {
-      // kąt obrotu = M·L/EJ
-      return ' ' + formatUnit(f.P, f.Q, f.L + 1, true);
-    }
-    if (kind === 'd_self') {
-      // δᵢᵢ = ∫Mᵢ·Mᵢ ds / EJ → fᵢ²·L / EJ
-      return ' ' + formatUnit(2*f.P, 2*f.Q, 2*f.L + 1, true);
-    }
-    if (kind === 'd_cross') {
-      const f2 = factorForType(sym.types[stateIdx2]);
-      if (!f2) return '';
-      return ' ' + formatUnit(f.P + f2.P, f.Q + f2.Q, f.L + f2.L + 1, true);
-    }
-    if (kind === 'X') {
-      // X_i ma wymiar f_0 / f_i (siłowy lub momentowy w zależności od typu redundancji)
-      const f0 = factorForType(sym.types[0]);
-      if (!f0) return '';
-      const Pp = f0.P - f.P, Qp = f0.Q - f.Q, Lp = f0.L - f.L;
-      if (Pp < 0 || Qp < 0 || Lp < 0) return '';
-      const u = formatUnit(Pp, Qp, Lp);
-      return u ? ' ' + u : '';
-    }
-    return '';
-  };
-  const symFmt = (val, kind, decimals=2, stateIdx, stateIdx2) => {
-    const numStr = fmt(val, decimals);
-    if (numStr === '—' || numStr === '0') return numStr;
-    const sfx = symSuffix(kind, stateIdx, stateIdx2);
-    return sfx ? `${numStr}${sfx}` : numStr;
-  };
+  const symSuffix = (kind, stateIdx, stateIdx2) =>
+    computeSymSuffix(sym, kind, (stateIdx === undefined || stateIdx === null) ? activeState : stateIdx, stateIdx2);
+  const symFmt = (val, kind, decimals=2, stateIdx, stateIdx2) =>
+    computeSymFmt(sym, val, kind, decimals, (stateIdx === undefined || stateIdx === null) ? activeState : stateIdx, stateIdx2);
 
   const calculate = useCallback(() => {
     try {
@@ -2199,6 +2344,7 @@ function App() {
 
   return (
     <div className="min-h-screen text-slate-100" style={{fontFamily:'ui-sans-serif, system-ui, sans-serif'}}>
+    <div className="print:hidden">
       <header className="border-b border-slate-800 bg-white sticky top-0 z-10 no-print">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -2610,6 +2756,17 @@ function App() {
           </div>
         </div>
       </div>}
+    </div>
+    {results && (
+      <div className="hidden print:block bg-white text-slate-100">
+        <PrintReport
+          nodes={nodes} elements={elements} supports={supports}
+          staticInfo={staticInfo}
+          basicSystemOptions={basicSystemOptions} selectedOption={selectedOption}
+          results={results} sym={sym} statesData={statesData} ejGcRatio={ejGcRatio}
+        />
+      </div>
+    )}
     </div>
   );
 }

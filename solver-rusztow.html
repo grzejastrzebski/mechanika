@@ -1372,13 +1372,13 @@ function MiniDiagram({M1, M2, q, L, color='#0891b2', suffix='', title=''}) {
       <polygon points={polyStr} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
       <line x1={pad} y1={baseY} x2={pad} y2={baseY - M1*yScale} stroke={color} strokeWidth="1"/>
       <line x1={w-pad} y1={baseY} x2={w-pad} y2={baseY - M2*yScale} stroke={color} strokeWidth="1"/>
-      {Math.abs(M1) > 1e-9 && <text x={pad+2} y={baseY - M1*yScale + (M1>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(M1,2)}{suffix}</text>}
-      {Math.abs(M2) > 1e-9 && <text x={w-pad-2} y={baseY - M2*yScale + (M2>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(M2,2)}{suffix}</text>}
+      {Math.abs(M1) > 1e-9 && <text x={pad+2} y={baseY - M1*yScale + (M1>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(M1,2)}{suffix}</text>}
+      {Math.abs(M2) > 1e-9 && <text x={w-pad-2} y={baseY - M2*yScale + (M2>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(M2,2)}{suffix}</text>}
       {peakInfo && <>
         <circle cx={peakInfo.x} cy={peakInfo.y} r="2" fill={color}/>
-        <text x={peakInfo.x} y={peakInfo.y + (peakInfo.val>=0 ? -4 : 11)} fontSize="9" fill={color} fontFamily="monospace" textAnchor="middle">{fmt(peakInfo.val,2)}{suffix}</text>
+        <text x={peakInfo.x} y={peakInfo.y + (peakInfo.val>=0 ? -5 : 14)} fontSize="11" fill={color} fontFamily="monospace" textAnchor="middle">{fmt(peakInfo.val,2)}{suffix}</text>
       </>}
-      {title && <text x={w/2} y={h-2} fontSize="9" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
+      {title && <text x={w/2} y={h-2} fontSize="11" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
     </svg>
   );
 }
@@ -1396,10 +1396,10 @@ function MiniRect({T, L, color='#ea580c', suffix='', title=''}) {
       <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#16243a" strokeWidth="1.5"/>
       {Math.abs(T) > 1e-9 && <>
         <rect x={pad} y={Math.min(baseY, top)} width={w-2*pad} height={Math.abs(top-baseY)} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
-        <text x={pad+2} y={top + (T>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(T,2)}{suffix}</text>
-        <text x={w-pad-2} y={top + (T>=0 ? -3 : 11)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(T,2)}{suffix}</text>
+        <text x={pad+2} y={top + (T>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(T,2)}{suffix}</text>
+        <text x={w-pad-2} y={top + (T>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(T,2)}{suffix}</text>
       </>}
-      {title && <text x={w/2} y={h-2} fontSize="9" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
+      {title && <text x={w/2} y={h-2} fontSize="11" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
     </svg>
   );
 }
@@ -1440,9 +1440,9 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
             <span className="text-slate-400 text-xl">×</span>
             <MiniDiagram M1={M1a} M2={M1b} q={q1} L={b.L} color={colorMz1} title={`Mz${i1}`} suffix={sufM1}/>
             <span className="text-slate-400">=</span>
-            <div className="text-xs font-mono text-slate-200">
-              <div className="text-[10px] text-slate-500">{mzInfo.description}</div>
-              <div>{mzInfo.formula} = {mzInfo.computation} = <span className="text-emerald-300 font-bold">{fmt(mzInfo.value,3)}{sufProd}</span></div>
+            <div className="text-base font-mono text-slate-200 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
+              <div className="text-xs text-slate-500">{mzInfo.description}</div>
+              <div>{mzInfo.formula} = {mzInfo.computation} = <span className="text-emerald-300 font-bold text-lg">{fmt(mzInfo.value,3)}{sufProd}</span></div>
             </div>
           </div>
         ) : (
@@ -1454,9 +1454,9 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
             <span className="text-slate-400 text-xl">×</span>
             <MiniRect T={T1} L={b.L} color={colorMs1} title={`Ms${i1}`} suffix={sufM1}/>
             <span className="text-slate-400">=</span>
-            <div className="text-xs font-mono text-slate-200">
-              <div className="text-[10px] text-slate-500">prostokąt × prostokąt</div>
-              <div>s·a·b = {fmt(b.L,2)}{sufL}·{fmt(T0,2)}{sufM0}·{fmt(T1,2)}{sufM1} = <span className="text-emerald-300 font-bold">{fmt(msVal,3)}{sufProd}</span></div>
+            <div className="text-base font-mono text-slate-200 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
+              <div className="text-xs text-slate-500">prostokąt × prostokąt</div>
+              <div>s·a·b = {fmt(b.L,2)}{sufL}·{fmt(T0,2)}{sufM0}·{fmt(T1,2)}{sufM1} = <span className="text-emerald-300 font-bold text-lg">{fmt(msVal,3)}{sufProd}</span></div>
             </div>
           </div>
         ) : (
@@ -1472,7 +1472,7 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
   // Mapowanie pairKey → klucz w deltas
   const totalKeyMap = {'00':'delta00', '11':'delta11', '10':'delta10', '22':'delta22', '20':'delta20', '12':'delta12'};
   const total = deltas[totalKeyMap[pairKey]] || 0;
-  const sub = pairKey.split('').map(c => c==='0'?'₀':c==='1'?'₁':'₂').join('');
+  const sub = pairKey;
   // Sufiks dla wartości końcowej δ (po podzieleniu przez EJ): jednostka_pary/EJ
   const totalSuf = (() => {
     if (!sym || !sym.enabled || !sym.types) return '';
@@ -1487,22 +1487,22 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
         <span>{label}</span>
         <span className="bg-amber-950/40 border border-amber-700/40 rounded px-2 py-0.5 normal-case tracking-normal text-amber-200 font-mono">EJ/GC = {fmt(deltas.EI_over_GJ, 3)}</span>
       </div>
-      <div className="font-mono text-sm text-slate-200 mb-3">
+      <div className="font-mono text-base text-slate-200 mb-3 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
         δ<sub>{sub}</sub> = (1/EJ) · [∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds + <span className="text-amber-300">(EJ/GC)</span> · ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds] = (1/EJ) · [∫Mz·Mz ds + <span className="text-amber-300">{fmt(deltas.EI_over_GJ, 3)}</span> · ∫Ms·Ms ds]
       </div>
       <div className="space-y-3">
         {beamPanels}
       </div>
-      <div className="mt-4 pt-3 border-t border-slate-800 font-mono text-sm space-y-1">
-        <div className="text-slate-300">∑ ∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds = <span className="text-emerald-300">{fmt(mzSum, 4)}{sufProd}</span></div>
-        <div className="text-slate-300">∑ ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds = <span className="text-emerald-300">{fmt(msSum, 4)}{sufProd}</span></div>
+      <div className="mt-4 pt-3 border-t border-slate-800 font-mono text-base space-y-1 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
+        <div className="text-slate-300">∑ ∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds = <span className="text-emerald-300 font-bold">{fmt(mzSum, 4)}{sufProd}</span></div>
+        <div className="text-slate-300">∑ ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds = <span className="text-emerald-300 font-bold">{fmt(msSum, 4)}{sufProd}</span></div>
         {deltas.uniform ? (
           <div className="text-slate-200 mt-2">
-            δ<sub>{sub}</sub> = (1/{fmt(deltas.EI_ref,2)}) · [{fmt(mzSum,4)}{sufProd} + {fmt(deltas.EI_over_GJ,3)} · {fmt(msSum,4)}{sufProd}] = <span className="text-emerald-200 font-bold text-base">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span>
+            δ<sub>{sub}</sub> = (1/{fmt(deltas.EI_ref,2)}) · [{fmt(mzSum,4)}{sufProd} + {fmt(deltas.EI_over_GJ,3)} · {fmt(msSum,4)}{sufProd}] = <span className="text-emerald-200 font-bold text-lg">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span>
           </div>
         ) : (
           <div className="text-slate-200 mt-2">
-            δ<sub>{sub}</sub> = <span className="text-emerald-200 font-bold text-base">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span> <span className="text-slate-500 text-xs">(różne EJ/GC po prętach – sumacja składowa)</span>
+            δ<sub>{sub}</sub> = <span className="text-emerald-200 font-bold text-lg">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span> <span className="text-slate-500 text-xs">(różne EJ/GC po prętach – sumacja składowa)</span>
           </div>
         )}
       </div>
@@ -1625,13 +1625,13 @@ function HingeMark({x, y, mg, ms, v, size=5, color='#d97706'}) {
   );
 }
 
-// Rzutowanie aksonometryczne (taka sama kamera jak StructureView w trybie 3D: yaw=0,
-// pitch=Math.PI/6, statyczna — bez przeciągania), żeby układ podstawowy w Etapie 2 był
-// czytelny przestrzennie tak jak finalne wykresy Mz3D/Ms3D.
+// Rzutowanie aksonometryczne (kamera jak StructureView w trybie 3D, ale obrócona o 45° w
+// prawo — klasyczna aksonometria inżynierska — żeby układ podstawowy w Etapie 2 był
+// zorientowany przodem do użytkownika; statyczna, bez przeciągania).
 function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=130, height=85}) {
   if (!nodes.length) return null;
-  const pad = 16;
-  const yaw = 0, pitch = Math.PI / 6;
+  const pad = 14;
+  const yaw = -Math.PI / 4, pitch = Math.PI / 6;
   const proj = (x, y, z) => {
     x = -x;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
@@ -1666,8 +1666,8 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
   const baseProj = nodes.map(n => { const [x, y] = getXY(n); return proj(x, y, 0); });
   const bx0 = baseProj.map(p => p.px), by0 = baseProj.map(p => p.py);
   const structSize = Math.max(Math.max(...bx0) - Math.min(...bx0), Math.max(...by0) - Math.min(...by0), 1);
-  const arrowLen = structSize * 0.6;
-  const momentRadius = structSize * 0.24;
+  const arrowLen = structSize * 0.45;
+  const momentRadius = structSize * 0.18;
   const axisOffset = structSize * 0.14;
 
   // Opis każdej strzałki/łuku w przestrzeni modelu (jeszcze nie zrzutowanej na ekran) — zarówno do
@@ -1782,7 +1782,7 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
             <g key={`xi${a.i}`}>
               <line x1={bx} y1={by} x2={tx} y2={ty} stroke={a.color} strokeWidth="1.6"/>
               <path d={`M ${tx-3} ${ty+5} L ${tx} ${ty} L ${tx+3} ${ty+5}`} fill="none" stroke={a.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              <text x={tx+5} y={ty-2} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
+              <text x={tx+9} y={ty-4} fontSize="14" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
             </g>
           );
         }
@@ -1793,7 +1793,7 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
           return (
             <g key={`xi${a.i}`}>
               <MomentArrow x={px} y={py} radius={r} angle={angle} color={a.color} ccw={a.ccw}/>
-              <text x={px + (r+7)*Math.sin(angle*Math.PI/180)} y={py - (r+7)*Math.cos(angle*Math.PI/180)} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
+              <text x={px + (r+11)*Math.sin(angle*Math.PI/180)} y={py - (r+11)*Math.cos(angle*Math.PI/180)} fontSize="14" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
             </g>
           );
         }
@@ -1809,7 +1809,7 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
               <path d={`M ${t1x-3} ${t1y+5} L ${t1x} ${t1y} L ${t1x+3} ${t1y+5}`} fill="none" stroke={a.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
               <line x1={b2x} y1={b2y} x2={t2x} y2={t2y} stroke={a.color} strokeWidth="1.6"/>
               <path d={`M ${t2x-3} ${t2y-5} L ${t2x} ${t2y} L ${t2x+3} ${t2y-5}`} fill="none" stroke={a.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              <text x={midx+6} y={midy} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
+              <text x={midx+9} y={midy} fontSize="14" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
             </g>
           );
         }
@@ -1822,7 +1822,7 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
           <g key={`xi${a.i}`}>
             <MomentArrow x={p1x} y={p1y} radius={rPair} angle={-45} color={a.color} ccw={a.ccwFirst}/>
             <MomentArrow x={p2x} y={p2y} radius={rPair} angle={-45} color={a.color} ccw={!a.ccwFirst}/>
-            <text x={midx+6} y={midy-4} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
+            <text x={midx+9} y={midy-7} fontSize="14" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
           </g>
         );
       })}

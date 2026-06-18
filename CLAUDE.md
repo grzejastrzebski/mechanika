@@ -36,6 +36,11 @@ logowania, bez wysyłania danych. Interfejs w języku polskim.
   P+kąt). **Vanilla JS + SVG**, bez zależności. Zwalidowany na przykładzie z `belka1.pdf`.
   **Strona chwilowo ukryta:** celowo poza `TABS` — brak zakładki i kafelka; dostępna
   wyłącznie pod bezpośrednim adresem `/belki.html`. Do pokazania, gdy zdecydujemy.
+- `pret-zakrzywiony.html` — kalkulator przemieszczeń pręta zakrzywionego w planie koła
+  metodą Maxwella-Mohra (zasada prac wirtualnych): ugięcie lub kąt obrotu od siły P,
+  momentu M i obciążenia ciągłego q (dowolna kombinacja), całkowanie numeryczne
+  (Simpson) po kącie φ, rozkład wyniku na człony per obciążenie z analizą wymiarową
+  potęgi R, tabela weryfikacyjna Mz/Ms. **Vanilla JS + SVG**, bez zależności.
 
 ## Mapa kalkulatorów (status w `index.html` → `TABS`)
 
@@ -43,14 +48,15 @@ Publikujemy gotowe kalkulatory pojedynczo. Pozostałe wpisy „soon"
 (Belki, Ramy, Przesunięcia/ugięcia) są **poza `TABS`** — dodajemy je później,
 gdy kalkulator jest gotowy. Gotowe definicje tych wpisów są w historii gita.
 
-| Moduł          | Status   | Plik                  |
-|----------------|----------|-----------------------|
-| Ruszty         | `ready`  | `solver-rusztow.html` |
-| Płyty okrągłe  | `ready`  | `plyty-okragle.html`  |
-| Belki          | ukryty (poza `TABS`, tylko `/belki.html`) | `belki.html` |
-| Reakcje        | ukryty (poza `TABS`, tylko `/reakcje.html`) | `reakcje.html` |
-| Ramy           | planowane (poza `TABS`) | —      |
-| Przesunięcia   | planowane (poza `TABS`) | —      |
+| Moduł              | Status   | Plik                     |
+|--------------------|----------|--------------------------|
+| Ruszty             | `ready`  | `solver-rusztow.html`    |
+| Pręt zakrzywiony   | `ready`  | `pret-zakrzywiony.html`  |
+| Płyty okrągłe      | `ready`  | `plyty-okragle.html`     |
+| Belki              | ukryty (poza `TABS`, tylko `/belki.html`) | `belki.html` |
+| Reakcje            | ukryty (poza `TABS`, tylko `/reakcje.html`) | `reakcje.html` |
+| Ramy               | planowane (poza `TABS`) | —      |
+| Przesunięcia       | planowane (poza `TABS`) | —      |
 
 ## Konwencje
 

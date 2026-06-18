@@ -1673,9 +1673,54 @@ function HingeMark({x, y, mg, ms, v, size=5, color='#d97706'}) {
 // prawo — klasyczna aksonometria inżynierska — żeby układ podstawowy w Etapie 2 był
 // zorientowany przodem do użytkownika; statyczna, bez przeciągania).
 function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=130, height=85}) {
+  const svgRef = useRef(null);
+  const dragRef = useRef(null);
+  const [view, setView] = useState({ yaw: -Math.PI / 4, pitch: Math.PI / 6, zoom: 1, panX: 0, panY: 0 });
+
+  // Wheel handler z passive:false, żeby preventDefault zablokował scroll strony przy zoomie.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setView(v => ({...v, zoom: Math.max(0.1, Math.min(20, v.zoom * delta))}));
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const getSvgPoint = (e) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width * width,
+      y: (e.clientY - rect.top) / rect.height * height,
+    };
+  };
+  const onMouseDown = (e) => {
+    if (e.button !== 0) return;
+    const pt = getSvgPoint(e);
+    dragRef.current = { startX: pt.x, startY: pt.y, startView: {...view}, mode: e.shiftKey ? 'pan' : 'rotate' };
+  };
+  const onMouseMove = (e) => {
+    if (!dragRef.current) return;
+    const pt = getSvgPoint(e);
+    const dx = pt.x - dragRef.current.startX;
+    const dy = pt.y - dragRef.current.startY;
+    const sv = dragRef.current.startView;
+    if (dragRef.current.mode === 'pan') {
+      setView({...sv, panX: sv.panX + dx, panY: sv.panY + dy});
+    } else {
+      const newYaw = sv.yaw + (dx / width) * Math.PI * 1.5;
+      const newPitch = Math.max(0.05, Math.min(Math.PI/2 - 0.05, sv.pitch - (dy / height) * Math.PI * 0.8));
+      setView({...sv, yaw: newYaw, pitch: newPitch});
+    }
+  };
+  const onMouseUp = () => { dragRef.current = null; };
+
   if (!nodes.length) return null;
   const pad = 14;
-  const yaw = -Math.PI / 4, pitch = Math.PI / 6;
+  const { yaw, pitch } = view;
   const proj = (x, y, z) => {
     x = -x;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
@@ -1772,11 +1817,15 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
   const pdx = (pxMax - pxMin) || 1, pdy = (pyMax - pyMin) || 1;
   const sc = Math.min((width - 2 * pad) / pdx, (height - 2 * pad) / pdy);
   const ccx = (pxMin + pxMax) / 2, ccy = (pyMin + pyMax) / 2;
-  const ps = (x, y, z) => { const p = proj(x, y, z); return [width / 2 + sc * (p.px - ccx), height / 2 + sc * (p.py - ccy)]; };
+  const ps = (x, y, z) => {
+    const p = proj(x, y, z);
+    return [width / 2 + view.zoom * sc * (p.px - ccx) + view.panX, height / 2 + view.zoom * sc * (p.py - ccy) + view.panY];
+  };
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
-         style={{background:'#f7f5ed', borderRadius:'4px', border:'1px solid #c9d6e3'}}>
+    <svg ref={svgRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`}
+         onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+         style={{background:'#f7f5ed', borderRadius:'4px', border:'1px solid #c9d6e3', cursor:'grab', userSelect:'none'}}>
       {elements.map((el, i) => {
         const n1 = nodeMap[el.n1], n2 = nodeMap[el.n2];
         if (!n1 || !n2) return null;

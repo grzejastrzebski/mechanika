@@ -738,11 +738,22 @@ function applyComboToModel(supports, elements, combo) {
 
 // "Logiczność" kombinacji do sortowania: czysto podporowe są najprostsze pedagogicznie (0),
 // każde dodatkowe rozcięcie wewnętrzne dopłaca punkty, a wśród rozcięć Mg < Ms < T.
-function comboScore(combo) {
+// Wyjątek: jeśli rozcięcie wypada na końcu pręta, na którym użytkownik JUŻ zdefiniował
+// fizyczny przegub (el.release1/el.release2), to jest to najwygodniejszy "studencki" wybór
+// układu podstawowego (przerwanie obwodu w miejscu istniejącej nieciągłości) — dostaje ogromny
+// bonus i pomija standardową karę Mg < Ms < T (w tym dla T, które normalnie ląduje na końcu).
+function comboScore(combo, elements) {
   let score = 0;
   for (const rc of combo) {
     if (rc.kind !== 'internal') continue;
-    score += 10 + (rc.relType === 'mg' ? 0 : rc.relType === 'ms' ? 1 : 2);
+    const el = elements && elements.find(e => e.id === rc.elementId);
+    const existing = el && el[rc.relKey];
+    const hasPhysicalHinge = existing && (existing.mg || existing.ms || existing.v);
+    if (hasPhysicalHinge) {
+      score += rc.relType === 'v' ? -1100 : -1000;
+    } else {
+      score += 10 + (rc.relType === 'mg' ? 0 : rc.relType === 'ms' ? 1 : 2);
+    }
   }
   return score;
 }
@@ -751,7 +762,7 @@ function comboScore(combo) {
 // testuje stabilność realnym złożeniem/rozwiązaniem (isGeometricallyStable) i zwraca maksymalnie
 // `maxResults` najbardziej "logicznych" (patrz comboScore).
 // Zwraca {valid: [{removed:[…]}, …], total: N}
-function enumerateBasicSystems(supports, nodes, elements, n, maxResults = 5) {
+function enumerateBasicSystems(supports, nodes, elements, n, maxResults = 20) {
   if (n <= 0) return {valid: [], total: 0};
   const pool = [...getAllConstraints(supports), ...getInternalReleaseCandidates(nodes, elements)];
   const allCombos = enumerateCombinations(pool, n);
@@ -759,7 +770,7 @@ function enumerateBasicSystems(supports, nodes, elements, n, maxResults = 5) {
   for (const combo of allCombos) {
     const {supports: tempSupports, elements: tempElements} = applyComboToModel(supports, elements, combo);
     if (isGeometricallyStable(tempSupports, nodes, tempElements)) {
-      scored.push({combo, score: comboScore(combo)});
+      scored.push({combo, score: comboScore(combo, elements)});
     }
   }
   scored.sort((a, b) => a.score - b.score);

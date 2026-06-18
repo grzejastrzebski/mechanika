@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pręt zakrzywiony w planie koła — metoda Maxwella-Mohra</title>
+<style>
+  :root{
+    --ink:#16243a; --paper:#fbfaf5; --line:#c9d6e3; --grid:#dde7ef;
+    --blue:#1f3a93; --red:#b6312a; --green:#27632a; --gold:#a9772b;
+    --card:#ffffff; --muted:#5a6b80;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    color:var(--ink); background:var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:22px 22px;
+    line-height:1.5; padding:0 0 80px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+  header.top{border-bottom:2px solid var(--ink); margin-top:18px; padding-bottom:10px}
+  header.top h1{font-size:1.5rem;margin:0 0 2px;letter-spacing:.3px}
+  header.top .sub{color:var(--muted);font-size:.9rem;font-style:italic}
+  h2.sec{
+    font-size:1.05rem;margin:26px 0 10px;padding-bottom:4px;
+    border-bottom:1px dashed var(--line); color:var(--blue);
+    display:flex;align-items:center;gap:8px;
+  }
+  h2.sec .n{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;
+    background:var(--blue);color:#fff;border-radius:4px;padding:1px 7px;
+  }
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:14px 14px 16px;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  label{display:block;font-size:.82rem;color:var(--muted);margin:8px 0 3px;font-style:italic}
+  input,select{
+    width:100%;font:inherit;font-size:.95rem;padding:8px 10px;border:1px solid var(--line);
+    border-radius:7px;background:#eef2f7;color:var(--ink)
+  }
+  input:focus,select:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:var(--blue);background:#fff}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  fieldset{border:1px solid var(--line);border-radius:8px;margin:10px 0 0;padding:6px 12px 10px}
+  legend{font-size:.8rem;color:var(--blue);font-weight:600;padding:0 6px;font-style:normal}
+  .loadrow{display:grid;grid-template-columns:22px 1fr 110px;gap:8px;align-items:end;margin:6px 0}
+  .loadrow input[type=checkbox]{width:18px;height:18px;margin-top:10px;accent-color:var(--blue)}
+  .radiorow{display:flex;gap:14px;margin:8px 0 2px}
+  .radiorow label{display:flex;align-items:center;gap:6px;font-style:normal;color:var(--ink);font-size:.92rem;margin:0}
+  .radiorow input{width:auto}
+  .btn{
+    margin-top:14px;width:100%;font:inherit;font-weight:700;font-size:1.05rem;
+    background:var(--red);color:#fff;border:none;border-radius:9px;padding:14px;cursor:pointer;
+    letter-spacing:.5px;box-shadow:0 2px 0 #7e201b;transition:.1s
+  }
+  .btn:active{transform:translateY(2px);box-shadow:0 0 0 #7e201b}
+  /* wyniki */
+  .result-const{
+    background:#fff;border:2px solid var(--red);border-radius:8px;padding:12px 14px;margin:10px 0;
+    font-family:ui-monospace,Menlo,Consolas,monospace
+  }
+  .result-const .ttl{font-family:inherit;font-style:italic;color:var(--red);font-size:.82rem;margin-bottom:6px;font-weight:600}
+  .result-const .term{font-size:.95rem;padding:3px 0;border-bottom:1px dotted var(--line)}
+  .result-const .term:last-child{border:none}
+  .result-const .total{font-size:1.1rem;font-weight:700;margin-top:8px;padding-top:8px;border-top:2px solid var(--line)}
+  .note{font-size:.82rem;color:var(--muted);font-style:italic;margin:6px 2px}
+  table.vals{width:100%;border-collapse:collapse;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;margin:8px 0}
+  table.vals th,table.vals td{border:1px solid var(--line);padding:6px 8px;text-align:right}
+  table.vals th{background:#eef2fb;color:var(--blue);text-align:center}
+  table.vals td:first-child,table.vals th:first-child{text-align:center;background:#f7f9fc}
+  .err{background:#fff0ef;border:1px solid var(--red);color:var(--red);padding:12px;border-radius:8px;margin:10px 0}
+  .scheme-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px;margin:0 0 12px}
+  .scheme-card .cap{font-size:.8rem;color:var(--muted);font-style:italic;margin:2px 6px 6px}
+  .scheme-card svg{width:100%;height:auto;min-width:280px;display:block}
+  .layout{display:grid;gap:20px;align-items:start;margin-top:14px;
+    grid-template-columns:380px minmax(0,1fr);
+    grid-template-areas:"inputs results"}
+  .col-inputs{grid-area:inputs;min-width:0;background:var(--card);
+    border:1px solid var(--line);border-radius:10px;padding:12px 12px 14px;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  .col-results{grid-area:results;min-width:0}
+  @media(max-width:900px){
+    .layout{grid-template-columns:1fr;grid-template-areas:"inputs" "results"}
+  }
+  @media print{
+    @page{margin:14mm}
+    body{background:#fff !important;background-image:none !important}
+    .no-print{display:none !important}
+    .layout{display:block !important}
+    .result-const,.scheme-card,table.vals{page-break-inside:avoid;break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Pręt zakrzywiony w planie koła</h1>
+    <div class="sub">Przemieszczenia metodą Maxwella-Mohra (zasada prac wirtualnych) — całkowanie numeryczne po kącie φ</div>
+  </header>
+
+  <div class="layout">
+    <!-- ============ LEWA KOLUMNA: formularz ============ -->
+    <div class="col-inputs no-print">
+      <fieldset>
+        <legend>Geometria</legend>
+        <div class="row">
+          <div><label>Promień R</label><input id="R" type="text" inputmode="decimal" value="2"></div>
+          <div><label>Jednostka długości</label>
+            <select id="unit">
+              <option value="mm">milimetry [mm]</option>
+              <option value="cm" selected>centymetry [cm]</option>
+              <option value="m">metry [m]</option>
+            </select>
+          </div>
+        </div>
+        <label>Kąt rozwarcia łuku φ_max [°] (od 0 — koniec swobodny, do φ_max — utwierdzenie)</label>
+        <input id="phiMaxDeg" type="text" inputmode="decimal" value="90">
+      </fieldset>
+
+      <fieldset>
+        <legend>Sztywność</legend>
+        <label>Stosunek sztywności EJ/GC</label>
+        <input id="ejgc" type="text" inputmode="decimal" value="1.3">
+      </fieldset>
+
+      <fieldset>
+        <legend>Obciążenia na końcu swobodnym (φ=0)</legend>
+        <div class="loadrow">
+          <input id="useP" type="checkbox">
+          <div><label style="margin-top:0">Siła skupiona P (prostopadła do osi pręta)</label></div>
+          <input id="P" type="text" inputmode="decimal" value="10">
+        </div>
+        <div class="loadrow">
+          <input id="useM" type="checkbox">
+          <div><label style="margin-top:0">Moment skupiony M</label></div>
+          <input id="M" type="text" inputmode="decimal" value="5">
+        </div>
+        <div class="loadrow">
+          <input id="useQ" type="checkbox">
+          <div><label style="margin-top:0">Obciążenie ciągłe q (na całym łuku)</label></div>
+          <input id="q" type="text" inputmode="decimal" value="2">
+        </div>
+        <div class="note">Odznaczone obciążenie liczone jest jako zerowe — możesz łączyć kilka naraz.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Szukana wielkość (w punkcie φ=0, na kierunku obciążenia jednostkowego)</legend>
+        <div class="radiorow">
+          <label><input type="radio" name="target" value="deflection" checked> Szukane ugięcie (wirtualne P=1)</label>
+          <label><input type="radio" name="target" value="rotation"> Szukany kąt obrotu (wirtualne M=1)</label>
+        </div>
+      </fieldset>
+
+      <button class="btn" id="btnCalc">Oblicz</button>
+    </div>
+
+    <!-- ============ PRAWA KOLUMNA: schemat + wyniki ============ -->
+    <div class="col-results">
+      <div class="scheme-card">
+        <div class="cap">Schemat — pręt zakrzywiony w planie koła, widok z góry</div>
+        <svg id="scheme" viewBox="0 0 520 300" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+
+      <div id="out"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SILNIK OBLICZENIOWY — metoda Maxwella-Mohra dla pręta kołowego
+   ============================================================
+   Konwencja: phi mierzone od końca swobodnego (phi=0, obciążenia
+   przyłożone) do utwierdzenia (phi=phiMax). ds = R*dphi.
+
+   Rzeczywiste momenty od obciążeń jednostkowych (load=1), bez R:
+   - P: Mz = -sin(phi),        Ms = -(1-cos(phi))         [R^1]
+   - M: Mz = -cos(phi),        Ms = +sin(phi)              [R^0]
+   - q: Mz = -(1-cos(phi)),    Ms = +(phi - sin(phi))       [R^2]
+   (potęga R w nawiasach = "loadDim" — ile razy R wchodzi do
+   wymiaru momentu wynikającego z danego obciążenia).
+
+   Obciążenie wirtualne = jednostkowe tego samego typu jak szukana
+   wielkość: ugięcie -> wirtualne P=1, obrót -> wirtualne M=1.
+   Całka przemieszczenia (po podzieleniu przez EJ symbolicznie):
+     wkład(load) = load * R^(loadDim+targetExtra) * coeff(load,target) / EJ
+   gdzie targetExtra = 2 (ugięcie) albo 1 (obrót) — dodatkowa potęga R
+   z ramienia siły wirtualnej i z ds=R*dphi.
+   ============================================================ */
+const SHAPES = {
+  P: { dim: 1, mz: phi => -Math.sin(phi),       ms: phi => -(1 - Math.cos(phi)) },
+  M: { dim: 0, mz: phi => -Math.cos(phi),       ms: phi => Math.sin(phi) },
+  q: { dim: 2, mz: phi => -(1 - Math.cos(phi)), ms: phi => (phi - Math.sin(phi)) },
+};
+function targetVirtualKey(target) { return target === 'deflection' ? 'P' : 'M'; }
+function targetExtraPower(target) { return target === 'deflection' ? 2 : 1; }
+
+// Całkowanie Simpsona f(phi) na [a,b] w n krokach (n zostaje wyrównane do parzystej liczby).
+function simpson(f, a, b, n) {
+  if (n % 2 === 1) n++;
+  const h = (b - a) / n;
+  let sum = f(a) + f(b);
+  for (let i = 1; i < n; i++) {
+    sum += f(a + i * h) * (i % 2 === 0 ? 2 : 4);
+  }
+  return sum * h / 3;
+}
+
+// Bezwymiarowy współczynnik całkowy dla danego obciążenia i szukanej wielkości
+// (jednostkowe obciążenie rzeczywiste x jednostkowe obciążenie wirtualne, z wagą EJ/GC na członie Ms).
+function integralCoeff(loadKey, target, phiMax, ejgc, n = 720) {
+  const ld = SHAPES[loadKey], v = SHAPES[targetVirtualKey(target)];
+  return simpson(phi => ld.mz(phi) * v.mz(phi) + ejgc * ld.ms(phi) * v.ms(phi), 0, phiMax, n);
+}
+
+// Rzeczywiste Mz/Ms (suma aktywnych obciążeń) w danym phi.
+function realMoments(loads, R, phi) {
+  let Mz = 0, Ms = 0;
+  for (const key of ['P', 'M', 'q']) {
+    const val = loads[key];
+    if (!val) continue;
+    const sh = SHAPES[key];
+    const Rp = Math.pow(R, sh.dim);
+    Mz += val * Rp * sh.mz(phi);
+    Ms += val * Rp * sh.ms(phi);
+  }
+  return { Mz, Ms };
+}
+
+function computeAll({ R, phiMaxDeg, ejgc, loads, target }) {
+  const phiMax = phiMaxDeg * Math.PI / 180;
+  const terms = [];
+  for (const key of ['P', 'M', 'q']) {
+    const val = loads[key];
+    if (!val) continue;
+    const power = SHAPES[key].dim + targetExtraPower(target);
+    const coeff = integralCoeff(key, target, phiMax, ejgc);
+    const contribution = val * Math.pow(R, power) * coeff;
+    terms.push({ key, val, power, coeff, contribution });
+  }
+  const total = terms.reduce((s, t) => s + t.contribution, 0);
+  const table = [0, phiMax / 2, phiMax].map(phi => ({
+    phiDeg: phi * 180 / Math.PI,
+    ...realMoments(loads, R, phi),
+  }));
+  return { phiMax, terms, total, table };
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const num = (id, def = 0) => { const v = parseFloat($(id).value.replace(',', '.')); return isFinite(v) ? v : def; };
+
+function fmt(x, d = 4) {
+  if (x === null || x === undefined || isNaN(x)) return '—';
+  if (Math.abs(x) < 1e-9) return '0';
+  if (Math.abs(x) < 1e-4 || Math.abs(x) >= 1e6) return x.toExponential(3);
+  return x.toFixed(d);
+}
+
+function drawScheme(R, phiMaxDeg, loads) {
+  const W = 520, H = 300, cx = 140, cy = 230, scale = 150 / Math.max(R, 1e-6);
+  const Rpx = R * scale;
+  const phiMax = phiMaxDeg * Math.PI / 180;
+  // phi=0 na "wschodzie" (kąt 0 w standardowym układzie), rosnące phi w lewoskrętnie (do góry).
+  const pt = phi => [cx + Rpx * Math.cos(phi), cy - Rpx * Math.sin(phi)];
+  const [x0, y0] = pt(0);
+  const [x1, y1] = pt(phiMax);
+  const large = phiMax > Math.PI ? 1 : 0;
+  let svg = `<g font-family="ui-monospace,monospace" font-size="11">`;
+  // łuk pręta
+  svg += `<path d="M ${x0} ${y0} A ${Rpx} ${Rpx} 0 ${large} 0 ${x1} ${y1}" fill="none" stroke="#16243a" stroke-width="4"/>`;
+  // środek koła + promień pomocniczy
+  svg += `<circle cx="${cx}" cy="${cy}" r="2.5" fill="#5a6b80"/>`;
+  svg += `<line x1="${cx}" y1="${cy}" x2="${x0}" y2="${y0}" stroke="#5a6b80" stroke-width="1" stroke-dasharray="3,3"/>`;
+  svg += `<text x="${(cx+x0)/2}" y="${(cy+y0)/2 - 6}" fill="#5a6b80">R</text>`;
+  // utwierdzenie w phi=max (kreskowanie)
+  const wallLen = 30, nx = Math.cos(phiMax), ny = -Math.sin(phiMax);
+  const tx_ = -ny, ty_ = nx;
+  svg += `<line x1="${x1 - tx_*wallLen}" y1="${y1 - ty_*wallLen}" x2="${x1 + tx_*wallLen}" y2="${y1 + ty_*wallLen}" stroke="#16243a" stroke-width="3"/>`;
+  for (let k = -3; k <= 3; k++) {
+    const bx = x1 + tx_*wallLen*(k/3.4), by = y1 + ty_*wallLen*(k/3.4);
+    svg += `<line x1="${bx}" y1="${by}" x2="${bx + nx*10}" y2="${by + ny*10}" stroke="#16243a" stroke-width="1.5"/>`;
+  }
+  svg += `<text x="${x1 + nx*22}" y="${y1 + ny*22}" fill="#5a6b80" text-anchor="middle">utwierdzenie (φ=φmax)</text>`;
+  // obciążenia w phi=0 (koniec swobodny)
+  svg += `<circle cx="${x0}" cy="${y0}" r="4" fill="#fff" stroke="#1f3a93" stroke-width="1.5"/>`;
+  svg += `<text x="${x0+8}" y="${y0-8}" fill="#1f3a93">φ=0</text>`;
+  let labelY = y0 + 26;
+  if (loads.P) { svg += `<line x1="${x0}" y1="${y0-22}" x2="${x0}" y2="${y0+4}" stroke="#b6312a" stroke-width="2" marker-end="url(#ah)"/><text x="${x0+8}" y="${y0-18}" fill="#b6312a">P=${loads.P}</text>`; }
+  if (loads.M) { svg += `<path d="M ${x0-14} ${y0+14} A 14 14 0 1 1 ${x0+10} ${y0+18}" fill="none" stroke="#a9772b" stroke-width="2"/><text x="${x0-4}" y="${labelY+18}" fill="#a9772b">M=${loads.M}</text>`; }
+  if (loads.q) { svg += `<text x="${(x0+x1)/2}" y="${Math.min(y0,y1)-10}" fill="#27632a" text-anchor="middle">q=${loads.q} (na całym łuku)</text>`; }
+  svg += `</g>`;
+  svg += `<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="7" orient="auto"><polygon points="0,0 8,0 4,8" fill="#b6312a"/></marker></defs>`;
+  $('scheme').innerHTML = svg;
+}
+
+function render() {
+  const R = num('R', 1);
+  const unit = $('unit').value;
+  const phiMaxDeg = num('phiMaxDeg', 90);
+  const ejgc = num('ejgc', 1.3);
+  const loads = {
+    P: $('useP').checked ? num('P', 0) : 0,
+    M: $('useM').checked ? num('M', 0) : 0,
+    q: $('useQ').checked ? num('q', 0) : 0,
+  };
+  const target = document.querySelector('input[name=target]:checked').value;
+
+  drawScheme(R, phiMaxDeg, loads);
+
+  const out = $('out');
+  if (phiMaxDeg <= 0 || phiMaxDeg > 360) {
+    out.innerHTML = `<div class="err">Kąt rozwarcia łuku musi być w zakresie (0°, 360°].</div>`;
+    return;
+  }
+  if (!loads.P && !loads.M && !loads.q) {
+    out.innerHTML = `<div class="err">Włącz przynajmniej jedno obciążenie (P, M lub q).</div>`;
+    return;
+  }
+
+  const res = computeAll({ R, phiMaxDeg, ejgc, loads, target });
+  const targetLabel = target === 'deflection' ? 'Ugięcie δ w φ=0 (na kierunku P)' : 'Kąt obrotu θ w φ=0 (na kierunku M)';
+
+  let html = `<div class="result-const">
+    <div class="ttl">${targetLabel}</div>`;
+  res.terms.forEach(t => {
+    const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
+    html += `<div class="term">wkład od ${t.key}: <b>${fmt(t.coeff, 5)}</b> · (${t.key}·R${rPow})/EJ &nbsp;=&nbsp; <b>${fmt(t.contribution, 5)}</b> / EJ</div>`;
+  });
+  html += `<div class="total">Wynik: ${fmt(res.total, 5)} / EJ &nbsp; <span style="font-size:.8rem;color:var(--muted)">[${unit}, EJ symbolicznie]</span></div>
+  </div>
+  <div class="note">Każdy wiersz to osobny człon superpozycji: stała·(obciążenie·R<sup>n</sup>)/EJ, gdzie n wynika z analizy wymiarowej (patrz przykład z instrukcji: M·R²/EJ dla wkładu momentu M do ugięcia). Suma członów = całkowite przemieszczenie / EJ.</div>`;
+
+  html += `<h2 class="sec"><span class="n">✓</span>Tabela weryfikacyjna — Mz, Ms (rzeczywiste)</h2>
+  <table class="vals"><thead><tr><th>φ</th><th>Mz</th><th>Ms</th></tr></thead><tbody>`;
+  res.table.forEach(row => {
+    html += `<tr><td>${fmt(row.phiDeg, 1)}°</td><td>${fmt(row.Mz, 4)}</td><td>${fmt(row.Ms, 4)}</td></tr>`;
+  });
+  html += `</tbody></table>
+  <div class="note">φ=0 — koniec swobodny (miejsce przyłożenia obciążeń), φ=φmax — utwierdzenie. Przy φ=0 Mz=Ms=0 dla wszystkich trzech typów obciążenia (zgodnie ze wzorami) — to dobry test silnika numerycznego.</div>`;
+
+  out.innerHTML = html;
+}
+
+['R','unit','phiMaxDeg','ejgc','useP','P','useM','M','useQ','q'].forEach(id => {
+  $(id).addEventListener('input', render);
+  $(id).addEventListener('change', render);
+});
+document.querySelectorAll('input[name=target]').forEach(r => r.addEventListener('change', render));
+$('btnCalc').addEventListener('click', render);
+
+// Domyślnie włącz P, żeby od razu było coś do policzenia.
+$('useP').checked = true;
+render();
+</script>
+</body>
+</html>

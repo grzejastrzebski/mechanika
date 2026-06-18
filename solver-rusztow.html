@@ -1379,76 +1379,73 @@ function StructureView({nodes, elements, supports, loads, results, viewMode, vie
   );
 }
 
-// Mini-wykres Mz dla pojedynczego pręta - SVG z wartościami przy końcach
-function MiniDiagram({M1, M2, q, L, color='#0891b2', suffix='', title=''}) {
-  const w = 110, h = 70;
-  const pad = 10;
-  const baseY = h * 0.6;
-  const segs = Math.abs(q) > 1e-9 ? 14 : 1;
-  // Compute all M values to find scale
-  const Ms = [];
-  for (let k=0; k<=segs; k++) {
-    const xi = k/segs, xL = xi*L;
-    Ms.push(M1*(1-xi) + M2*xi + q*xL*(L-xL)/2);
-  }
-  const maxAbs = Math.max(Math.abs(M1), Math.abs(M2), ...Ms.map(Math.abs), 1e-9);
-  const yScale = (h*0.4) / maxAbs;
-  const pts = [[pad, baseY]];
-  for (let k=0; k<=segs; k++) {
-    const xi = k/segs, xL = xi*L;
-    const M = M1*(1-xi) + M2*xi + q*xL*(L-xL)/2;
-    pts.push([pad + xi*(w-2*pad), baseY - M*yScale]);
-  }
-  pts.push([w-pad, baseY]);
-  const polyStr = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-  // Find peak for parabolic case
-  let peakInfo = null;
-  if (Math.abs(q) > 1e-9) {
-    let pkM = M1, pkXi = 0;
-    Ms.forEach((m,k) => { if (Math.abs(m) > Math.abs(pkM)) { pkM = m; pkXi = k/segs; } });
-    if (Math.abs(pkM - M1) > 1e-3 && Math.abs(pkM - M2) > 1e-3) {
-      peakInfo = {x: pad + pkXi*(w-2*pad), y: baseY - pkM*yScale, val: pkM};
-    }
-  }
+// Ułamek pionowy (np. EJ/GC, 1/3) — do zapisu równań w stylu odręcznym.
+function VFrac({n, d}) {
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-white rounded">
-      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#16243a" strokeWidth="1.5"/>
-      <polygon points={polyStr} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
-      <line x1={pad} y1={baseY} x2={pad} y2={baseY - M1*yScale} stroke={color} strokeWidth="1"/>
-      <line x1={w-pad} y1={baseY} x2={w-pad} y2={baseY - M2*yScale} stroke={color} strokeWidth="1"/>
-      {Math.abs(M1) > 1e-9 && <text x={pad+2} y={baseY - M1*yScale + (M1>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(M1,2)}{suffix}</text>}
-      {Math.abs(M2) > 1e-9 && <text x={w-pad-2} y={baseY - M2*yScale + (M2>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(M2,2)}{suffix}</text>}
-      {peakInfo && <>
-        <circle cx={peakInfo.x} cy={peakInfo.y} r="2" fill={color}/>
-        <text x={peakInfo.x} y={peakInfo.y + (peakInfo.val>=0 ? -5 : 14)} fontSize="11" fill={color} fontFamily="monospace" textAnchor="middle">{fmt(peakInfo.val,2)}{suffix}</text>
-      </>}
-      {title && <text x={w/2} y={h-2} fontSize="11" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
-    </svg>
+    <span className="inline-flex flex-col text-center align-middle mx-1 text-sm leading-none">
+      <span className="border-b border-current px-0.5">{n}</span>
+      <span className="px-0.5">{d}</span>
+    </span>
   );
 }
 
-// Mini-wykres Ms (stałe wzdłuż pręta) - prostokąt
-function MiniRect({T, L, color='#ea580c', suffix='', title=''}) {
-  const w = 110, h = 70;
-  const pad = 10;
-  const baseY = h * 0.5;
-  const maxAbs = Math.max(Math.abs(T), 1e-9);
-  const yScale = (h*0.3) / maxAbs;
-  const top = baseY - T*yScale;
+// Owija liczby ujemne w nawiasy (np. "-4.00" -> "(-4.00)") — wymóg zapisu odręcznego z instrukcji.
+function parenNeg(str) {
+  return String(str).replace(/(-[\d.]+(?:e-?\d+)?)/g, '($1)');
+}
+
+// Czytelne mapowanie wiodącego znaku ułamka unicode (z multiplicationFormula) na licznik/mianownik.
+const FRAC_MAP = { '⅓': [1,3], '⅙': [1,6], '½': [1,2] };
+
+// Bardzo lekki, "wpleciony w tekst" wykres — tylko obrys kształtu (bez tytułu, siatki, etykiet);
+// liczby idą w tekście obok, nie w samym rysunku. Używany zarówno dla Mz (M1/M2/q dowolne), jak
+// i dla Ms (przekazujemy M1=M2=T, q=0 — stały rozkład wzdłuż pręta wygląda jak prostokąt).
+function InlineDiagram({M1, M2, q=0, L, color='#0891b2'}) {
+  const w = 30, h = 22, pad = 1.5, padY = 2, baseY = h / 2;
+  const segs = Math.abs(q) > 1e-9 ? 12 : 1;
+  const vals = [];
+  for (let k=0; k<=segs; k++) { const xi=k/segs, xL=xi*L; vals.push(M1*(1-xi)+M2*xi+q*xL*(L-xL)/2); }
+  const maxAbs = Math.max(Math.abs(M1), Math.abs(M2), ...vals.map(Math.abs), 1e-9);
+  // baseY na środku wysokości — symetryczny zapas miejsca dla wartości +/- (inaczej ujemne
+  // rzędne (np. stałe Ms < 0) wychodzą poza viewBox i są przycinane).
+  const yScale = (h / 2 - padY) / maxAbs;
+  const pts = [[pad, baseY]];
+  for (let k=0; k<=segs; k++) { const xi=k/segs, xL=xi*L; const M=M1*(1-xi)+M2*xi+q*xL*(L-xL)/2; pts.push([pad+xi*(w-2*pad), baseY-M*yScale]); }
+  pts.push([w-pad, baseY]);
+  const poly = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="bg-white rounded">
-      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke="#16243a" strokeWidth="1.5"/>
-      {Math.abs(T) > 1e-9 && <>
-        <rect x={pad} y={Math.min(baseY, top)} width={w-2*pad} height={Math.abs(top-baseY)} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
-        <text x={pad+2} y={top + (T>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold">{fmt(T,2)}{suffix}</text>
-        <text x={w-pad-2} y={top + (T>=0 ? -4 : 14)} fontSize="11" fill={color} fontFamily="monospace" fontWeight="bold" textAnchor="end">{fmt(T,2)}{suffix}</text>
-      </>}
-      {title && <text x={w/2} y={h-2} fontSize="11" fill="#5a6b80" fontFamily="monospace" textAnchor="middle">{title}</text>}
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block" style={{verticalAlign:'middle'}}>
+      <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke={color} strokeWidth="0.75" opacity="0.5"/>
+      <polygon points={poly} fill={`${color}33`} stroke={color} strokeWidth="1"/>
     </svg>
   );
 }
 
 // Panel rozkładu Wereszczagina dla wybranej pary stanów
+// Renderuje jeden człon liczbowy z multiplicationFormula (Linia 3): wiodący ułamek (⅓/⅙/½),
+// jeśli występuje, jako pionowy <VFrac>, a pozostałe czynniki (rozdzielone "·") z nawiasami na
+// liczbach ujemnych. Ogólny przypadek (trapez/parabola) jest zbyt złożony na rozbicie na czynniki
+// — pokazujemy go w całości jako jeden blok tekstu (wciąż z nawiasami na liczbach ujemnych).
+function renderNumericTerm(formula, computation, key) {
+  const frac = FRAC_MAP[formula[0]];
+  if (frac || formula === 's·a·b') {
+    const body = frac ? computation.slice(1).replace(/^·/, '') : computation;
+    const factors = body.split('·').filter(Boolean);
+    return (
+      <span key={key} className="whitespace-nowrap">
+        {frac && <><VFrac n={frac[0]} d={frac[1]}/><span className="mx-0.5">·</span></>}
+        {factors.map((f, i) => <React.Fragment key={i}>{i > 0 && <span className="mx-0.5">·</span>}{parenNeg(f)}</React.Fragment>)}
+      </span>
+    );
+  }
+  return <span key={key} className="whitespace-nowrap">{parenNeg(computation)}</span>;
+}
+
+// Panel rozkładu Wereszczagina dla wybranej pary stanów — zapisany jako spójny, wieloliniowy
+// ciąg matematyczny (styl odręczny): (1) wzór ogólny, (2) wykresy wplecione w równanie,
+// (3) podstawienie liczbowe, (4) wynik końcowy. Pomijamy człony, których iloczyn jest
+// tożsamościowo zerowy (jeden z wykresów = 0 / T0 albo T1 = 0) — w zapisie odręcznym też się je
+// po prostu nie pisze.
 function WereshchaginPanel({deltas, pairKey, label, sym}) {
   if (!deltas?.perBeam) return null;
   const i0 = pairKey[0], i1 = pairKey[1];
@@ -1456,68 +1453,39 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
   const sufM1 = mSufInline(i1, sym);
   const sufL = lSufInline(sym);
   const sufProd = productSufInline(i0, i1, sym);
-  // Iteracja po prętach, generacja per-beam description
-  const beamPanels = deltas.perBeam.map((b, idx) => {
-    const pickM = (st) => st==='0' ? {a: b.M0a, bb: b.M0b, q: b.q0} :
-                          st==='1' ? {a: b.M1a, bb: b.M1b, q: b.q1} :
-                                     {a: b.M2a||0, bb: b.M2b||0, q: b.q2||0};
-    const pickT = (st) => st==='0' ? b.T0 : st==='1' ? b.T1 : (b.T2||0);
-    const v0 = pickM(i0), v1 = pickM(i1);
+  const pickM = (b, st) => st==='0' ? {a: b.M0a, bb: b.M0b, q: b.q0} :
+                           st==='1' ? {a: b.M1a, bb: b.M1b, q: b.q1} :
+                                      {a: b.M2a||0, bb: b.M2b||0, q: b.q2||0};
+  const pickT = (b, st) => st==='0' ? b.T0 : st==='1' ? b.T1 : (b.T2||0);
+  const colorMz0 = '#0891b2', colorMz1 = '#7c3aed';
+  const colorMs0 = '#ea580c', colorMs1 = '#db2777';
+
+  // Próg 1e-6 (zamiast samego typu 'zero' z classifyShape) odsiewa też szum numeryczny solvera
+  // (rzędu 1e-10..1e-9, poniżej progu fmt() pokazującego "0", ale powyżej względnego epsilona
+  // classifyShape) — bez tego w zapisie odręcznym pojawiałyby się człony typu "1.00·0·0 = 0".
+  const mzTerms = [], msTerms = [];
+  deltas.perBeam.forEach(b => {
+    const v0 = pickM(b, i0), v1 = pickM(b, i1);
     const M0a = v0.a, M0b = v0.bb, q0 = v0.q;
     const M1a = v1.a, M1b = v1.bb, q1 = v1.q;
-    const T0 = pickT(i0), T1 = pickT(i1);
     const s0 = classifyShape(M0a, M0b, q0, b.L);
     const s1 = classifyShape(M1a, M1b, q1, b.L);
-    const mzInfo = multiplicationFormula(s0, s1, b.L, sym, i0, i1);
-    const msVal = T0 * T1 * b.L;
-    const colorMz0 = '#0891b2', colorMz1 = '#7c3aed';
-    const colorMs0 = '#ea580c', colorMs1 = '#db2777';
-    return (
-      <div key={`b${idx}`} className="bg-white rounded-lg p-3 border border-slate-800">
-        <div className="text-[11px] font-mono text-slate-300 mb-2">
-          <span className="text-cyan-300 font-semibold">Pręt {b.el.id}</span> ({b.el.n1}→{b.el.n2}, s = {fmt(b.L,2)}{sufL})
-          <span className="text-slate-500 ml-2">EJ={fmt(b.EI,2)}, GC={fmt(b.GJ,2)}</span>
-        </div>
-        {(Math.abs(M0a)+Math.abs(M0b)+Math.abs(q0)+Math.abs(M1a)+Math.abs(M1b)+Math.abs(q1)) > 1e-9 ? (
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            <MiniDiagram M1={M0a} M2={M0b} q={q0} L={b.L} color={colorMz0} title={`Mz${i0}`} suffix={sufM0}/>
-            <span className="text-slate-400 text-xl">×</span>
-            <MiniDiagram M1={M1a} M2={M1b} q={q1} L={b.L} color={colorMz1} title={`Mz${i1}`} suffix={sufM1}/>
-            <span className="text-slate-400">=</span>
-            <div className="text-base font-mono text-slate-200 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
-              <div className="text-xs text-slate-500">{mzInfo.description}</div>
-              <div>{mzInfo.formula} = {mzInfo.computation} = <span className="text-emerald-300 font-bold text-lg">{fmt(mzInfo.value,3)}{sufProd}</span></div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-xs text-slate-600 italic mb-2">Mz = 0 na tym pręcie</div>
-        )}
-        {(Math.abs(T0)+Math.abs(T1)) > 1e-9 ? (
-          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800/60">
-            <MiniRect T={T0} L={b.L} color={colorMs0} title={`Ms${i0}`} suffix={sufM0}/>
-            <span className="text-slate-400 text-xl">×</span>
-            <MiniRect T={T1} L={b.L} color={colorMs1} title={`Ms${i1}`} suffix={sufM1}/>
-            <span className="text-slate-400">=</span>
-            <div className="text-base font-mono text-slate-200 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
-              <div className="text-xs text-slate-500">prostokąt × prostokąt</div>
-              <div>s·a·b = {fmt(b.L,2)}{sufL}·{fmt(T0,2)}{sufM0}·{fmt(T1,2)}{sufM1} = <span className="text-emerald-300 font-bold text-lg">{fmt(msVal,3)}{sufProd}</span></div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-xs text-slate-600 italic">Ms = 0 na tym pręcie</div>
-        )}
-      </div>
-    );
+    const info = multiplicationFormula(s0, s1, b.L, sym, i0, i1);
+    if (Math.abs(info.value) > 1e-6) {
+      mzTerms.push({ b, M0a, M0b, q0, M1a, M1b, q1, info });
+    }
+    const T0 = pickT(b, i0), T1 = pickT(b, i1);
+    if (Math.abs(T0 * T1 * b.L) > 1e-6) {
+      msTerms.push({ b, T0, T1 });
+    }
   });
 
   const sums = deltas.sums;
   const mzSum = sums[`mz${pairKey}`] || 0;
   const msSum = sums[`ms${pairKey}`] || 0;
-  // Mapowanie pairKey → klucz w deltas
   const totalKeyMap = {'00':'delta00', '11':'delta11', '10':'delta10', '22':'delta22', '20':'delta20', '12':'delta12'};
   const total = deltas[totalKeyMap[pairKey]] || 0;
   const sub = pairKey;
-  // Sufiks dla wartości końcowej δ (po podzieleniu przez EJ): jednostka_pary/EJ
   const totalSuf = (() => {
     if (!sym || !sym.enabled || !sym.types) return '';
     const f0 = factorForType(sym.types[parseInt(i0)]);
@@ -1525,31 +1493,79 @@ function WereshchaginPanel({deltas, pairKey, label, sym}) {
     if (!f0 || !f1) return '';
     return formatUnit(f0.P + f1.P, f0.Q + f1.Q, f0.L + f1.L + 1, true);
   })();
+
   return (
-    <div className="bg-slate-950/40 border border-emerald-800/40 rounded-lg p-4 mt-3">
-      <div className="text-xs uppercase tracking-wider text-emerald-300 mb-3 font-semibold flex items-center gap-3 flex-wrap">
+    <div className="bg-slate-950/40 border border-emerald-800/40 rounded-lg p-4 mt-3 font-serif [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
+      <div className="text-xs uppercase tracking-wider text-emerald-300 mb-3 font-semibold flex items-center gap-3 flex-wrap font-sans not-italic">
         <span>{label}</span>
         <span className="bg-amber-950/40 border border-amber-700/40 rounded px-2 py-0.5 normal-case tracking-normal text-amber-200 font-mono">EJ/GC = {fmt(deltas.EI_over_GJ, 3)}</span>
       </div>
-      <div className="font-mono text-base text-slate-200 mb-3 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
-        δ<sub>{sub}</sub> = (1/EJ) · [∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds + <span className="text-amber-300">(EJ/GC)</span> · ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds] = (1/EJ) · [∫Mz·Mz ds + <span className="text-amber-300">{fmt(deltas.EI_over_GJ, 3)}</span> · ∫Ms·Ms ds]
+
+      {/* Linia 1: wzór ogólny */}
+      <div className="text-lg text-slate-200 mb-3">
+        δ<sub>{sub}</sub> = (1/EJ) · [∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds + <VFrac n="EJ" d="GC"/>· ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds]
       </div>
-      <div className="space-y-3">
-        {beamPanels}
+
+      {/* Linia 2: równanie graficzne — wykresy wplecione w tekst */}
+      <div className="flex flex-wrap items-center gap-y-2 gap-x-1.5 text-base text-slate-200 mb-2">
+        <span>= (1/EJ)</span><span className="text-4xl font-light leading-none">[</span>
+        {mzTerms.map((t, i) => (
+          <React.Fragment key={`mzg${i}`}>
+            {i > 0 && <span className="text-slate-400">+</span>}
+            <InlineDiagram M1={t.M0a} M2={t.M0b} q={t.q0} L={t.b.L} color={colorMz0}/>
+            <span className="text-slate-400">·</span>
+            <InlineDiagram M1={t.M1a} M2={t.M1b} q={t.q1} L={t.b.L} color={colorMz1}/>
+          </React.Fragment>
+        ))}
+        <span className="text-4xl font-light leading-none">]</span>
+        {msTerms.length > 0 && <>
+          <span className="text-slate-400">+</span><VFrac n="EJ" d="GC"/>
+          <span className="text-4xl font-light leading-none">(</span>
+          {msTerms.map((t, i) => (
+            <React.Fragment key={`msg${i}`}>
+              {i > 0 && <span className="text-slate-400">+</span>}
+              <InlineDiagram M1={t.T0} M2={t.T0} L={t.b.L} color={colorMs0}/>
+              <span className="text-slate-400">·</span>
+              <InlineDiagram M1={t.T1} M2={t.T1} L={t.b.L} color={colorMs1}/>
+            </React.Fragment>
+          ))}
+          <span className="text-4xl font-light leading-none">)</span>
+        </>}
       </div>
-      <div className="mt-4 pt-3 border-t border-slate-800 font-mono text-base space-y-1 [&_sup]:text-[0.8em] [&_sub]:text-[0.8em]">
-        <div className="text-slate-300">∑ ∫Mz<sup>{i0}</sup>·Mz<sup>{i1}</sup> ds = <span className="text-emerald-300 font-bold">{fmt(mzSum, 4)}{sufProd}</span></div>
-        <div className="text-slate-300">∑ ∫Ms<sup>{i0}</sup>·Ms<sup>{i1}</sup> ds = <span className="text-emerald-300 font-bold">{fmt(msSum, 4)}{sufProd}</span></div>
-        {deltas.uniform ? (
-          <div className="text-slate-200 mt-2">
-            δ<sub>{sub}</sub> = (1/{fmt(deltas.EI_ref,2)}) · [{fmt(mzSum,4)}{sufProd} + {fmt(deltas.EI_over_GJ,3)} · {fmt(msSum,4)}{sufProd}] = <span className="text-emerald-200 font-bold text-lg">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span>
-          </div>
-        ) : (
-          <div className="text-slate-200 mt-2">
-            δ<sub>{sub}</sub> = <span className="text-emerald-200 font-bold text-lg">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span> <span className="text-slate-500 text-xs">(różne EJ/GC po prętach – sumacja składowa)</span>
-          </div>
-        )}
+
+      {/* Linia 3: podstawienie liczbowe */}
+      <div className="flex flex-wrap items-center gap-y-2 gap-x-1.5 text-base text-slate-200 mb-3">
+        <span>= (1/EJ)</span><span className="text-4xl font-light leading-none">[</span>
+        {mzTerms.map((t, i) => (
+          <React.Fragment key={`mzn${i}`}>
+            {i > 0 && <span className="text-slate-400">+</span>}
+            {renderNumericTerm(t.info.formula, t.info.computation, `mznn${i}`)}
+          </React.Fragment>
+        ))}
+        <span className="text-4xl font-light leading-none">]</span>
+        {msTerms.length > 0 && <>
+          <span className="text-slate-400">+</span><VFrac n="EJ" d="GC"/>
+          <span className="text-4xl font-light leading-none">(</span>
+          {msTerms.map((t, i) => (
+            <React.Fragment key={`msn${i}`}>
+              {i > 0 && <span className="text-slate-400">+</span>}
+              <span className="whitespace-nowrap">{parenNeg(fmt(t.b.L,2))}{sufL}·{parenNeg(fmt(t.T0,2))}{sufM0}·{parenNeg(fmt(t.T1,2))}{sufM1}</span>
+            </React.Fragment>
+          ))}
+          <span className="text-4xl font-light leading-none">)</span>
+        </>}
       </div>
+
+      {/* Linia 4: wynik końcowy */}
+      {deltas.uniform ? (
+        <div className="text-lg text-slate-200 border-t border-slate-800 pt-2">
+          = (1/{fmt(deltas.EI_ref,2)}) · [<span className="text-emerald-300 font-bold">{fmt(mzSum,4)}{sufProd}</span> + {fmt(deltas.EI_over_GJ,3)}·<span className="text-emerald-300 font-bold">{fmt(msSum,4)}{sufProd}</span>] = <span className="font-bold text-emerald-200 text-xl">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span>
+        </div>
+      ) : (
+        <div className="text-lg text-slate-200 border-t border-slate-800 pt-2">
+          = <span className="font-bold text-emerald-200 text-xl">{fmt(total, 4)}{totalSuf?' '+totalSuf:''}</span> <span className="text-slate-500 text-xs font-sans not-italic">(różne EJ/GC po prętach – sumacja składowa)</span>
+        </div>
+      )}
     </div>
   );
 }

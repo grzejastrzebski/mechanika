@@ -1625,29 +1625,125 @@ function HingeMark({x, y, mg, ms, v, size=5, color='#d97706'}) {
   );
 }
 
+// Rzutowanie aksonometryczne (taka sama kamera jak StructureView w trybie 3D: yaw=0,
+// pitch=Math.PI/6, statyczna — bez przeciągania), żeby układ podstawowy w Etapie 2 był
+// czytelny przestrzennie tak jak finalne wykresy Mz3D/Ms3D.
 function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=130, height=85}) {
   if (!nodes.length) return null;
   const pad = 16;
-  const xs = nodes.map(n => parseFloat(n.x)||0), ys = nodes.map(n => parseFloat(n.y)||0);
-  const xmin=Math.min(...xs), xmax=Math.max(...xs), ymin=Math.min(...ys), ymax=Math.max(...ys);
-  const dx=(xmax-xmin)||1, dy=(ymax-ymin)||1;
-  const sc = Math.min((width-2*pad)/dx, (height-2*pad)/dy);
-  const tx = x => width/2 + sc*(x-(xmin+xmax)/2);
-  const ty = y => height/2 - sc*(y-(ymin+ymax)/2);
+  const yaw = 0, pitch = Math.PI / 6;
+  const proj = (x, y, z) => {
+    x = -x;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const xr = x * cy - y * sy;
+    const yr = x * sy + y * cy;
+    const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+    return { px: (xr - yr) * cosP, py: (xr + yr) * sinP - z };
+  };
+
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+  const getXY = node => [parseFloat(node.x) || 0, parseFloat(node.y) || 0];
+  // Kierunek osi pręta w węźle (do rozstawienia pary strzałek/łuków po obu stronach rozcięcia).
+  const elementAxisDir = (elementId, atNodeId) => {
+    const el = elements.find(e => e.id === elementId);
+    if (!el) return [1, 0];
+    const otherId = el.n1 === atNodeId ? el.n2 : el.n1;
+    const a = nodeMap[atNodeId], b = nodeMap[otherId];
+    if (!a || !b) return [1, 0];
+    const [ax, ay] = getXY(a), [bx, by] = getXY(b);
+    const dx = bx - ax, dy = by - ay;
+    const len = Math.hypot(dx, dy) || 1;
+    return [dx / len, dy / len];
+  };
+
   const supMap = {};
   supports.forEach(s => { supMap[s.node] = s; });
   const removedSet = new Set(removedConstraints.filter(r => r.kind !== 'internal').map(r => `${r.node}:${r.dof}`));
+
+  // Przebieg 1: rzut samej geometrii (z=0), żeby ustalić rozmiar konstrukcji i z niego wyskalować
+  // proporcjonalnie długości strzałek/łuków, zanim policzymy ostateczny bounding box.
+  const baseProj = nodes.map(n => { const [x, y] = getXY(n); return proj(x, y, 0); });
+  const bx0 = baseProj.map(p => p.px), by0 = baseProj.map(p => p.py);
+  const structSize = Math.max(Math.max(...bx0) - Math.min(...bx0), Math.max(...by0) - Math.min(...by0), 1);
+  const arrowLen = structSize * 0.6;
+  const momentRadius = structSize * 0.24;
+  const axisOffset = structSize * 0.14;
+
+  // Opis każdej strzałki/łuku w przestrzeni modelu (jeszcze nie zrzutowanej na ekran) — zarówno do
+  // obliczenia prawdziwego 3D bounding boxa, jak i do narysowania jedną, wspólną transformacją `ps`.
+  const annotations = [];
+  removedConstraints.forEach((rc, i) => {
+    const color = ['#7c3aed', '#db2777', '#d97706'][i] || '#e11d48';
+    if (rc.kind === 'internal') {
+      const node = nodeMap[rc.node]; if (!node) return;
+      const [nx, ny] = getXY(node);
+      const [dx, dy] = elementAxisDir(rc.elementId, rc.node);
+      const sameNodeInternal = removedConstraints.filter(r => r.node === rc.node && r.kind === 'internal');
+      const localIdx = sameNodeInternal.indexOf(rc);
+      const fan = localIdx * axisOffset * 0.9;
+      const off = axisOffset + fan;
+      const p1 = [nx - dx * off, ny - dy * off];
+      const p2 = [nx + dx * off, ny + dy * off];
+      if (rc.relType === 'v') {
+        // Rozcięcie siły tnącej: para przeciwnych strzałek pionowych po obu stronach przecięcia.
+        annotations.push({ type: 'shearPair', i, color, xi: rc.xi, p1, p2, h: arrowLen * 0.55 });
+      } else {
+        // Rozcięcie momentu (Mg/Ms): para przeciwnych łuków — reprezentuje parę sił na przecięciu.
+        annotations.push({ type: 'momentPair', i, color, xi: rc.xi, p1, p2, radius: momentRadius * 0.75, ccwFirst: rc.relType === 'ms' });
+      }
+    } else {
+      const node = nodeMap[rc.node]; if (!node) return;
+      const [nx, ny] = getXY(node);
+      if (rc.dof === 'z') {
+        const sameNodeForces = removedConstraints.filter(r => r.node === rc.node && r.kind !== 'internal' && r.dof === 'z');
+        const localIdx = sameNodeForces.indexOf(rc);
+        annotations.push({ type: 'forceUp', i, color, xi: rc.xi, p: [nx + localIdx * axisOffset * 0.5, ny], h: arrowLen });
+      } else {
+        const sameNodeMoments = removedConstraints.filter(r => r.node === rc.node && r.kind !== 'internal' && r.dof !== 'z');
+        const localIdx = sameNodeMoments.indexOf(rc);
+        annotations.push({ type: 'moment', i, color, xi: rc.xi, p: [nx, ny], radius: momentRadius + localIdx * momentRadius * 0.55, ccw: rc.dof === 'ry' });
+      }
+    }
+  });
+
+  // Przebieg 2: zbieramy wszystkie punkty 3D, które faktycznie narysujemy (węzły + groty strzałek/
+  // łuki), żeby jeden wspólny skala+offset (`ps`) zmieścił całość — w tym nowe strzałki 3D — w SVG.
+  let allPx = [], allPy = [];
+  const pushP = (x, y, z) => { const p = proj(x, y, z); allPx.push(p.px); allPy.push(p.py); };
+  nodes.forEach(n => { const [x, y] = getXY(n); pushP(x, y, 0); });
+  annotations.forEach(a => {
+    if (a.type === 'forceUp') { pushP(a.p[0], a.p[1], 0); pushP(a.p[0], a.p[1], a.h); }
+    else if (a.type === 'moment') { pushP(a.p[0] - a.radius, a.p[1] - a.radius, 0); pushP(a.p[0] + a.radius, a.p[1] + a.radius, 0); }
+    else if (a.type === 'shearPair') {
+      pushP(a.p1[0], a.p1[1], a.h); pushP(a.p1[0], a.p1[1], 0);
+      pushP(a.p2[0], a.p2[1], -a.h); pushP(a.p2[0], a.p2[1], 0);
+    } else if (a.type === 'momentPair') {
+      pushP(a.p1[0] - a.radius, a.p1[1] - a.radius, 0); pushP(a.p1[0] + a.radius, a.p1[1] + a.radius, 0);
+      pushP(a.p2[0] - a.radius, a.p2[1] - a.radius, 0); pushP(a.p2[0] + a.radius, a.p2[1] + a.radius, 0);
+    }
+  });
+  const pxMin = Math.min(...allPx), pxMax = Math.max(...allPx);
+  const pyMin = Math.min(...allPy), pyMax = Math.max(...allPy);
+  const pdx = (pxMax - pxMin) || 1, pdy = (pyMax - pyMin) || 1;
+  const sc = Math.min((width - 2 * pad) / pdx, (height - 2 * pad) / pdy);
+  const ccx = (pxMin + pxMax) / 2, ccy = (pyMin + pyMax) / 2;
+  const ps = (x, y, z) => { const p = proj(x, y, z); return [width / 2 + sc * (p.px - ccx), height / 2 + sc * (p.py - ccy)]; };
+
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}
          style={{background:'#f7f5ed', borderRadius:'4px', border:'1px solid #c9d6e3'}}>
       {elements.map((el, i) => {
-        const n1=nodes.find(n=>n.id===el.n1), n2=nodes.find(n=>n.id===el.n2);
-        if (!n1||!n2) return null;
-        return <line key={`e${i}`} x1={tx(parseFloat(n1.x))} y1={ty(parseFloat(n1.y))} x2={tx(parseFloat(n2.x))} y2={ty(parseFloat(n2.y))} stroke="#16243a" strokeWidth="1.5"/>;
+        const n1 = nodeMap[el.n1], n2 = nodeMap[el.n2];
+        if (!n1 || !n2) return null;
+        const [x1, y1] = getXY(n1), [x2, y2] = getXY(n2);
+        const [px1, py1] = ps(x1, y1, 0), [px2, py2] = ps(x2, y2, 0);
+        return <line key={`e${i}`} x1={px1} y1={py1} x2={px2} y2={py2} stroke="#16243a" strokeWidth="1.5"/>;
       })}
       {nodes.map(node => {
         const sup = supMap[node.id];
-        const px = tx(parseFloat(node.x)||0), py = ty(parseFloat(node.y)||0);
+        const [x, y] = getXY(node);
+        const [px, py] = ps(x, y, 0);
         if (sup) {
           const isFullFixed = (sup.z && !removedSet.has(`${node.id}:z`)) &&
                               (sup.rx && !removedSet.has(`${node.id}:rx`)) &&
@@ -1678,48 +1774,55 @@ function MiniBasicSystem({nodes, elements, supports, removedConstraints, width=1
           </g>
         );
       })}
-      {removedConstraints.map((rc, i) => {
-        const nd = nodes.find(n => n.id===rc.node); if (!nd) return null;
-        const px = tx(parseFloat(nd.x)||0), py = ty(parseFloat(nd.y)||0);
-        const colors = ['#7c3aed','#db2777','#d97706'];
-        const color = colors[i] || '#e11d48';
-        if (rc.kind === 'internal') {
-          // Wiele rozcięć wewnętrznych w tym samym węźle (np. dwa różne pręty kończące się w
-          // tym samym punkcie): rozstrzelamy promieniście, żeby kółka się nie pokrywały.
-          const sameNodeInternal = removedConstraints.filter(r => r.node === rc.node && r.kind === 'internal');
-          const localIdx = sameNodeInternal.indexOf(rc);
-          const off = localIdx * 11;
-          const ox = px + 9 + off * 0.6, oy = py - 9 - off * 0.6;
+      {annotations.map(a => {
+        if (a.type === 'forceUp') {
+          const [bx, by] = ps(a.p[0], a.p[1], 0);
+          const [tx, ty] = ps(a.p[0], a.p[1], a.h);
           return (
-            <g key={`xi${i}`}>
-              <HingeMark x={ox} y={oy} mg={rc.relType==='mg'} ms={rc.relType==='ms'} v={rc.relType==='v'} size={5} color={color}/>
-              <text x={ox+8} y={oy+3} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>
+            <g key={`xi${a.i}`}>
+              <line x1={bx} y1={by} x2={tx} y2={ty} stroke={a.color} strokeWidth="1.6"/>
+              <path d={`M ${tx-3} ${ty+5} L ${tx} ${ty} L ${tx+3} ${ty+5}`} fill="none" stroke={a.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <text x={tx+5} y={ty-2} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
             </g>
           );
         }
-        // Wiele zwolnionych więzów w tym samym węźle: siły rozstrzelamy kątowo, momenty —
-        // koncentrycznie (różne radiusy), żeby łuki się nie pokrywały wizualnie.
-        const sameNode = removedConstraints.filter(r => r.node === rc.node && r.kind !== 'internal');
-        const sameNodeForces = sameNode.filter(r => r.dof === 'z');
-        const sameNodeMoments = sameNode.filter(r => r.dof !== 'z');
-        const arrowLen = Math.min(width, height) * 0.22;
-        if (rc.dof === 'z') {
-          const localIdx = sameNodeForces.indexOf(rc);
-          const angle = localIdx * 40;
+        if (a.type === 'moment') {
+          const [px, py] = ps(a.p[0], a.p[1], 0);
+          const angle = -45;
+          const r = a.radius * sc;
           return (
-            <g key={`xi${i}`}>
-              <ForceArrow x={px} y={py} angle={angle} length={arrowLen} color={color}/>
-              <text x={px + arrowLen*Math.sin(angle*Math.PI/180) + 4} y={py - arrowLen*Math.cos(angle*Math.PI/180) - 2} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>
+            <g key={`xi${a.i}`}>
+              <MomentArrow x={px} y={py} radius={r} angle={angle} color={a.color} ccw={a.ccw}/>
+              <text x={px + (r+7)*Math.sin(angle*Math.PI/180)} y={py - (r+7)*Math.cos(angle*Math.PI/180)} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
             </g>
           );
         }
-        const momentIdx = sameNodeMoments.indexOf(rc);
-        const radius = arrowLen * 0.5 + momentIdx * (arrowLen * 0.32);
-        const angle = -45;
+        if (a.type === 'shearPair') {
+          const [b1x, b1y] = ps(a.p1[0], a.p1[1], 0);
+          const [t1x, t1y] = ps(a.p1[0], a.p1[1], a.h);
+          const [b2x, b2y] = ps(a.p2[0], a.p2[1], 0);
+          const [t2x, t2y] = ps(a.p2[0], a.p2[1], -a.h);
+          const midx = (b1x+b2x)/2, midy = (t1y+t2y)/2;
+          return (
+            <g key={`xi${a.i}`}>
+              <line x1={b1x} y1={b1y} x2={t1x} y2={t1y} stroke={a.color} strokeWidth="1.6"/>
+              <path d={`M ${t1x-3} ${t1y+5} L ${t1x} ${t1y} L ${t1x+3} ${t1y+5}`} fill="none" stroke={a.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1={b2x} y1={b2y} x2={t2x} y2={t2y} stroke={a.color} strokeWidth="1.6"/>
+              <path d={`M ${t2x-3} ${t2y-5} L ${t2x} ${t2y} L ${t2x+3} ${t2y-5}`} fill="none" stroke={a.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <text x={midx+6} y={midy} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
+            </g>
+          );
+        }
+        // momentPair: para przeciwnych łuków po obu stronach rozcięcia (= para sił przy zwolnieniu Mg/Ms).
+        const [p1x, p1y] = ps(a.p1[0], a.p1[1], 0);
+        const [p2x, p2y] = ps(a.p2[0], a.p2[1], 0);
+        const midx = (p1x+p2x)/2, midy = (p1y+p2y)/2;
+        const rPair = a.radius * sc;
         return (
-          <g key={`xi${i}`}>
-            <MomentArrow x={px} y={py} radius={radius} angle={angle} color={color} ccw={rc.dof==='ry'}/>
-            <text x={px + (radius+7)*Math.sin(angle*Math.PI/180)} y={py - (radius+7)*Math.cos(angle*Math.PI/180)} fontSize="9" fill={color} fontFamily="monospace" fontWeight="bold">{rc.xi}</text>
+          <g key={`xi${a.i}`}>
+            <MomentArrow x={p1x} y={p1y} radius={rPair} angle={-45} color={a.color} ccw={a.ccwFirst}/>
+            <MomentArrow x={p2x} y={p2y} radius={rPair} angle={-45} color={a.color} ccw={!a.ccwFirst}/>
+            <text x={midx+6} y={midy-4} fontSize="9" fill={a.color} fontFamily="monospace" fontWeight="bold">{a.xi}</text>
           </g>
         );
       })}

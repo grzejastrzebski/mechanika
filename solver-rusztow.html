@@ -930,7 +930,9 @@ const fmt = (x, d=2) => {
   if (x === null || x === undefined || isNaN(x)) return '—';
   if (Math.abs(x) < 1e-9) return '0';
   if (Math.abs(x) < 0.01 || Math.abs(x) >= 1e5) return x.toExponential(2);
-  return x.toFixed(d);
+  // parseFloat ucina nadmiarowe zera po przecinku (4.00 -> "4", 4.50 -> "4.5"), bez nich liczby
+  // w równaniach Wereszczagina i tabelach są dużo czytelniejsze.
+  return parseFloat(x.toFixed(d)).toString();
 };
 
 const tabBtn = (active) => `px-4 py-2 text-xs font-medium tracking-wide uppercase transition-colors border-b-2 ${active ? 'text-cyan-300 border-cyan-400' : 'text-slate-400 border-transparent hover:text-slate-200'}`;
@@ -1397,11 +1399,12 @@ function parenNeg(str) {
 // Czytelne mapowanie wiodącego znaku ułamka unicode (z multiplicationFormula) na licznik/mianownik.
 const FRAC_MAP = { '⅓': [1,3], '⅙': [1,6], '½': [1,2] };
 
-// Lekki, "wpleciony w tekst" wykres — tylko obrys kształtu, plus etykieta rzędnej w punkcie
-// maksimum |wartości| i etykieta długości pręta (s) pod osią; bez tytułu/siatki. Używany zarówno
-// dla Mz (M1/M2/q dowolne), jak i dla Ms (przekazujemy M1=M2=T, q=0 — stały rozkład wzdłuż pręta
-// wygląda jak prostokąt). Górny/dolny margines (topMargin/bottomMargin) rezerwuje miejsce na
-// etykiety, żeby nie były przycinane przez viewBox.
+// Lekki, "wpleciony w tekst" wykres — tylko obrys kształtu, plus etykiety rzędnych na obu
+// końcach (lewej i prawej, np. dla trapezu — różne wartości po obu stronach) i etykieta
+// długości pręta (s) pod osią; bez tytułu/siatki. Używany zarówno dla Mz (M1/M2/q dowolne), jak
+// i dla Ms (przekazujemy M1=M2=T, q=0 — stały rozkład wzdłuż pręta wygląda jak prostokąt).
+// Górny/dolny margines (topMargin/bottomMargin) rezerwuje miejsce na etykiety, żeby nie były
+// przycinane przez viewBox.
 function InlineDiagram({M1, M2, q=0, L, color='#0891b2'}) {
   const w = 112, h = 80, pad = 4, topMargin = 16, bottomMargin = 18;
   const halfSpan = (h - topMargin - bottomMargin) / 2;
@@ -1414,26 +1417,37 @@ function InlineDiagram({M1, M2, q=0, L, color='#0891b2'}) {
   // wartości +/- (inaczej ujemne rzędne, np. stałe Ms < 0, wychodzą poza viewBox i są przycinane).
   const yScale = (halfSpan - 2) / maxAbs;
   const pts = [[pad, baseY]];
-  let peak = {val: 0, x: pad, y: baseY};
+  let mid = {val: 0, x: w / 2, y: baseY};
   for (let k=0; k<=segs; k++) {
     const xi=k/segs, xL=xi*L;
     const M = M1*(1-xi)+M2*xi+q*xL*(L-xL)/2;
     const px = pad+xi*(w-2*pad), py = baseY-M*yScale;
     pts.push([px, py]);
-    if (Math.abs(M) > Math.abs(peak.val)) peak = {val: M, x: px, y: py};
+    if (Math.abs(M) > Math.abs(mid.val)) mid = {val: M, x: px, y: py};
   }
   pts.push([w-pad, baseY]);
   const poly = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-  const peakAnchor = peak.x < w*0.25 ? 'start' : peak.x > w*0.75 ? 'end' : 'middle';
+  const y1 = baseY - M1*yScale, y2 = baseY - M2*yScale;
+  const hasEnds = Math.abs(M1) > 1e-9 || Math.abs(M2) > 1e-9;
+  // Gdy obie wartości brzegowe są zerowe (czysta parabola od q, np. trójkąt/parabola z M1=M2=0),
+  // brak etykiet na końcach — pokaż etykietę w punkcie maksimum (środek łuku) zamiast nich.
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="inline-block align-middle" style={{verticalAlign:'middle'}}>
       <line x1={pad} y1={baseY} x2={w-pad} y2={baseY} stroke={color} strokeWidth="0.75" opacity="0.5"/>
       <polygon points={poly} fill={`${color}33`} stroke={color} strokeWidth="1.2"/>
-      {Math.abs(peak.val) > 1e-9 && (
-        <text x={peak.x} y={peak.val >= 0 ? peak.y - 5 : peak.y + 13} textAnchor={peakAnchor}
-              fontSize="11" fontFamily="sans-serif" fill={color}>{peak.val.toFixed(2)}</text>
+      {Math.abs(M1) > 1e-9 && (
+        <text x={pad} y={M1 >= 0 ? y1 - 5 : y1 + 13} textAnchor="start"
+              fontSize="11" fontFamily="sans-serif" fill={color}>{fmt(M1, 2)}</text>
       )}
-      <text x={w/2} y={h-4} textAnchor="middle" fontSize="10" fontFamily="sans-serif" fill="#64748b">s={L.toFixed(2)}</text>
+      {Math.abs(M2) > 1e-9 && (
+        <text x={w-pad} y={M2 >= 0 ? y2 - 5 : y2 + 13} textAnchor="end"
+              fontSize="11" fontFamily="sans-serif" fill={color}>{fmt(M2, 2)}</text>
+      )}
+      {!hasEnds && Math.abs(mid.val) > 1e-9 && (
+        <text x={mid.x} y={mid.val >= 0 ? mid.y - 5 : mid.y + 13} textAnchor="middle"
+              fontSize="11" fontFamily="sans-serif" fill={color}>{fmt(mid.val, 2)}</text>
+      )}
+      <text x={w/2} y={h-4} textAnchor="middle" fontSize="10" fontFamily="sans-serif" fill="#64748b">s={fmt(L, 2)}</text>
     </svg>
   );
 }

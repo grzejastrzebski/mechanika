@@ -72,6 +72,24 @@
   table.vals th{background:#eef2fb;color:var(--blue);text-align:center}
   table.vals td:first-child,table.vals th:first-child{text-align:center;background:#f7f9fc}
   .err{background:#fff0ef;border:1px solid var(--red);color:var(--red);padding:12px;border-radius:8px;margin:10px 0}
+  /* "Krok po kroku" — arkusz papieru z notatkami z wykładu */
+  .steps{background:#fffdf7;border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0}
+  .step{margin:0 0 18px}
+  .step:last-child{margin-bottom:0}
+  .step .stitle{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--blue);margin:0 0 8px}
+  .step .stitle .num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+    border-radius:50%;background:var(--blue);color:#fff;font-size:.8rem;font-family:ui-monospace,monospace;flex-shrink:0}
+  .step .lead{font-style:italic;color:var(--muted);margin:2px 0 8px;font-size:.92rem}
+  .step .loadhdr{font-style:italic;color:var(--gold);font-size:.86rem;margin:8px 0 4px}
+  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;background:#f3f1e8;
+    border-left:3px solid var(--blue);padding:7px 12px;border-radius:0 6px 6px 0;margin:4px 0;
+    overflow-wrap:break-word;white-space:normal}
+  .eq.big{font-size:1.05rem}
+  .vfrac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;
+    margin:0 3px;font-size:.78em;line-height:1.15;position:relative;top:.15em}
+  .vfrac span{display:block;padding:0 3px}
+  .vfrac span:first-child{border-bottom:1px solid currentColor}
+  .step .result-line{font-weight:700;color:var(--red);font-size:1.05rem}
   .scheme-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px;margin:0 0 12px}
   .scheme-card .cap{font-size:.8rem;color:var(--muted);font-style:italic;margin:2px 6px 6px}
   .scheme-card svg{width:100%;height:auto;min-width:280px;display:block}
@@ -117,6 +135,12 @@
         </div>
         <label>Kąt rozwarcia łuku φ_max [°] (od 0 — koniec swobodny, do φ_max — utwierdzenie)</label>
         <input id="phiMaxDeg" type="text" inputmode="decimal" value="90">
+        <label>Kierunek wygięcia pręta</label>
+        <select id="dir">
+          <option value="right" selected>W prawo</option>
+          <option value="left">W lewo</option>
+        </select>
+        <div class="note">Utwierdzenie jest zawsze na dole schematu (φ=φ_max); pręt wygina się od niego w wybraną stronę do końca swobodnego (φ=0).</div>
       </fieldset>
 
       <fieldset>
@@ -197,6 +221,39 @@ const SHAPES = {
 function targetVirtualKey(target) { return target === 'deflection' ? 'P' : 'M'; }
 function targetExtraPower(target) { return target === 'deflection' ? 2 : 1; }
 
+/* ------------------------------------------------------------
+   Kierunek wygięcia (w lewo / w prawo) — odzwierciedlenie geometrii
+   przez płaszczyznę pionową zawierającą utwierdzenie. Moment gnący Mz
+   zależy tylko od rzutu poziomego ramienia siły względem linii
+   działania obciążenia — symetryczny względem zwierciadlenia, więc
+   NIE zmienia znaku. Moment skrętny Ms ma charakter pseudowektora
+   (zależy od "skrętności" obiegu łuku) i ZMIENIA znak przy zmianie
+   kierunku wygięcia. `dir` = +1 (w prawo, konwencja referencyjna
+   zgodna ze wzorami źródłowymi) albo -1 (w lewo).
+   Uwaga: w samej całce (iloczyn Mz·Mz̄ + Ms·Ms̄) dir się znosi
+   (dir·dir = 1) — wynik liczbowy przemieszczenia nie zależy od
+   kierunku (zwierciadlane odbicie całego układu, łącznie z
+   obciążeniem, nie zmienia wielkości fizycznej). `dir` wpływa więc
+   tylko na WYŚWIETLANE wzory/tabelę (Krok 1-3), nie na Krok 4.
+   ------------------------------------------------------------ */
+// Pełne wzory fizyczne (z R) — do tekstowego raportu "krok po kroku".
+const FORMULA = {
+  P: { mzSign: -1, mzBody: 'R·sin(φ)',         msSign: -1, msBody: 'R·(1 − cos(φ))' },
+  M: { mzSign: -1, mzBody: 'cos(φ)',           msSign: +1, msBody: 'sin(φ)' },
+  q: { mzSign: -1, mzBody: 'R²·(1 − cos(φ))',  msSign: +1, msBody: 'R²·(φ − sin(φ))' },
+};
+// Pojedynczy podpisany człon "±coef·wyrażenie" (coef = symbol obciążenia: P/M/q albo '1' dla wirtualnego).
+function termStr(sign, coefText, body) {
+  return (sign < 0 ? '−' : '') + `${coefText}·${body}`;
+}
+// Łączy kilka już podpisanych członów w jeden ciąg z poprawnymi spacjami wokół +/−.
+function joinTerms(strs) {
+  return strs.map((s, i) => {
+    if (i === 0) return s;
+    return s.startsWith('−') ? ` ${s}` : ` + ${s}`;
+  }).join('');
+}
+
 // Całkowanie Simpsona f(phi) na [a,b] w n krokach (n zostaje wyrównane do parzystej liczby).
 function simpson(f, a, b, n) {
   if (n % 2 === 1) n++;
@@ -215,8 +272,8 @@ function integralCoeff(loadKey, target, phiMax, ejgc, n = 720) {
   return simpson(phi => ld.mz(phi) * v.mz(phi) + ejgc * ld.ms(phi) * v.ms(phi), 0, phiMax, n);
 }
 
-// Rzeczywiste Mz/Ms (suma aktywnych obciążeń) w danym phi.
-function realMoments(loads, R, phi) {
+// Rzeczywiste Mz/Ms (suma aktywnych obciążeń) w danym phi. `dir`: patrz komentarz przy FORMULA.
+function realMoments(loads, R, phi, dir = 1) {
   let Mz = 0, Ms = 0;
   for (const key of ['P', 'M', 'q']) {
     const val = loads[key];
@@ -224,12 +281,12 @@ function realMoments(loads, R, phi) {
     const sh = SHAPES[key];
     const Rp = Math.pow(R, sh.dim);
     Mz += val * Rp * sh.mz(phi);
-    Ms += val * Rp * sh.ms(phi);
+    Ms += dir * val * Rp * sh.ms(phi);
   }
   return { Mz, Ms };
 }
 
-function computeAll({ R, phiMaxDeg, ejgc, loads, target }) {
+function computeAll({ R, phiMaxDeg, ejgc, loads, target, dir = 1 }) {
   const phiMax = phiMaxDeg * Math.PI / 180;
   const terms = [];
   for (const key of ['P', 'M', 'q']) {
@@ -243,7 +300,7 @@ function computeAll({ R, phiMaxDeg, ejgc, loads, target }) {
   const total = terms.reduce((s, t) => s + t.contribution, 0);
   const table = [0, phiMax / 2, phiMax].map(phi => ({
     phiDeg: phi * 180 / Math.PI,
-    ...realMoments(loads, R, phi),
+    ...realMoments(loads, R, phi, dir),
   }));
   return { phiMax, terms, total, table };
 }
@@ -261,41 +318,107 @@ function fmt(x, d = 4) {
   return x.toFixed(d);
 }
 
-function drawScheme(R, phiMaxDeg, loads) {
-  const W = 520, H = 300, cx = 140, cy = 230, scale = 150 / Math.max(R, 1e-6);
-  const Rpx = R * scale;
+// Utwierdzenie jest zawsze na dole schematu; pręt wygina się od niego w stronę `dir`
+// (+1 = w prawo, -1 = w lewo) do końca swobodnego (φ=0). Kąt fizyczny φ (od końca
+// swobodnego) jest mapowany na kąt geometryczny rysunku tak, by φ=φmax (utwierdzenie)
+// zawsze wypadało "na dole" (kąt geometryczny -90°), niezależnie od φmax i kierunku.
+function drawScheme(R, phiMaxDeg, loads, dir) {
+  const W = 520, H = 300, cx = W / 2, Rpx = 120;
   const phiMax = phiMaxDeg * Math.PI / 180;
-  // phi=0 na "wschodzie" (kąt 0 w standardowym układzie), rosnące phi w lewoskrętnie (do góry).
-  const pt = phi => [cx + Rpx * Math.cos(phi), cy - Rpx * Math.sin(phi)];
-  const [x0, y0] = pt(0);
-  const [x1, y1] = pt(phiMax);
-  const large = phiMax > Math.PI ? 1 : 0;
+  const supportY = H - 36;
+  const cy = supportY - Rpx;
+  const geomAngle = physicsPhi => -Math.PI / 2 + dir * (phiMax - physicsPhi);
+  const pt = physicsPhi => { const a = geomAngle(physicsPhi); return [cx + Rpx * Math.cos(a), cy - Rpx * Math.sin(a)]; };
+  const [x0, y0] = pt(0);          // koniec swobodny (obciążenia)
+  const [x1, y1] = pt(phiMax);     // utwierdzenie — zawsze (cx, supportY)
+  // kierunek promieniowy "na zewnątrz" w końcu swobodnym — do rozstawienia etykiet obciążeń
+  const a0 = geomAngle(0), outx = Math.cos(a0), outy = -Math.sin(a0);
+
   let svg = `<g font-family="ui-monospace,monospace" font-size="11">`;
-  // łuk pręta
-  svg += `<path d="M ${x0} ${y0} A ${Rpx} ${Rpx} 0 ${large} 0 ${x1} ${y1}" fill="none" stroke="#16243a" stroke-width="4"/>`;
-  // środek koła + promień pomocniczy
+  // łuk pręta — rysowany punktowo (bez flag SVG "arc"), żeby uniknąć błędów kierunku/zwrotu łuku
+  const N = 60;
+  let pathD = '';
+  for (let k = 0; k <= N; k++) { const [px, py] = pt(phiMax * k / N); pathD += (k === 0 ? 'M ' : 'L ') + px.toFixed(1) + ' ' + py.toFixed(1) + ' '; }
+  svg += `<path d="${pathD}" fill="none" stroke="#16243a" stroke-width="4"/>`;
+  // środek koła + promień pomocniczy (do końca swobodnego)
   svg += `<circle cx="${cx}" cy="${cy}" r="2.5" fill="#5a6b80"/>`;
   svg += `<line x1="${cx}" y1="${cy}" x2="${x0}" y2="${y0}" stroke="#5a6b80" stroke-width="1" stroke-dasharray="3,3"/>`;
   svg += `<text x="${(cx+x0)/2}" y="${(cy+y0)/2 - 6}" fill="#5a6b80">R</text>`;
-  // utwierdzenie w phi=max (kreskowanie)
-  const wallLen = 30, nx = Math.cos(phiMax), ny = -Math.sin(phiMax);
-  const tx_ = -ny, ty_ = nx;
-  svg += `<line x1="${x1 - tx_*wallLen}" y1="${y1 - ty_*wallLen}" x2="${x1 + tx_*wallLen}" y2="${y1 + ty_*wallLen}" stroke="#16243a" stroke-width="3"/>`;
+  // utwierdzenie — zawsze poziome kreskowanie na dole (promień w tym punkcie jest zawsze pionowy)
+  const wallLen = 30;
+  svg += `<line x1="${cx-wallLen}" y1="${supportY}" x2="${cx+wallLen}" y2="${supportY}" stroke="#16243a" stroke-width="3"/>`;
   for (let k = -3; k <= 3; k++) {
-    const bx = x1 + tx_*wallLen*(k/3.4), by = y1 + ty_*wallLen*(k/3.4);
-    svg += `<line x1="${bx}" y1="${by}" x2="${bx + nx*10}" y2="${by + ny*10}" stroke="#16243a" stroke-width="1.5"/>`;
+    const bx = cx + wallLen*(k/3.4);
+    svg += `<line x1="${bx}" y1="${supportY}" x2="${bx}" y2="${supportY+10}" stroke="#16243a" stroke-width="1.5"/>`;
   }
-  svg += `<text x="${x1 + nx*22}" y="${y1 + ny*22}" fill="#5a6b80" text-anchor="middle">utwierdzenie (φ=φmax)</text>`;
-  // obciążenia w phi=0 (koniec swobodny)
+  svg += `<text x="${cx}" y="${supportY+24}" fill="#5a6b80" text-anchor="middle">utwierdzenie (φ=φmax)</text>`;
+  // obciążenia w phi=0 (koniec swobodny) — etykiety rozstawione wzdłuż kierunku "na zewnątrz" łuku
   svg += `<circle cx="${x0}" cy="${y0}" r="4" fill="#fff" stroke="#1f3a93" stroke-width="1.5"/>`;
-  svg += `<text x="${x0+8}" y="${y0-8}" fill="#1f3a93">φ=0</text>`;
-  let labelY = y0 + 26;
-  if (loads.P) { svg += `<line x1="${x0}" y1="${y0-22}" x2="${x0}" y2="${y0+4}" stroke="#b6312a" stroke-width="2" marker-end="url(#ah)"/><text x="${x0+8}" y="${y0-18}" fill="#b6312a">P=${loads.P}</text>`; }
-  if (loads.M) { svg += `<path d="M ${x0-14} ${y0+14} A 14 14 0 1 1 ${x0+10} ${y0+18}" fill="none" stroke="#a9772b" stroke-width="2"/><text x="${x0-4}" y="${labelY+18}" fill="#a9772b">M=${loads.M}</text>`; }
-  if (loads.q) { svg += `<text x="${(x0+x1)/2}" y="${Math.min(y0,y1)-10}" fill="#27632a" text-anchor="middle">q=${loads.q} (na całym łuku)</text>`; }
+  svg += `<text x="${x0+outx*14}" y="${y0+outy*14-6}" fill="#1f3a93" text-anchor="middle">φ=0</text>`;
+  const lx = x0 + outx*34, ly = y0 + outy*34;
+  if (loads.P) { svg += `<line x1="${lx}" y1="${ly+22}" x2="${lx}" y2="${ly-4}" stroke="#b6312a" stroke-width="2" marker-end="url(#ah)"/><text x="${lx+8}" y="${ly+18}" fill="#b6312a">P=${loads.P}</text>`; }
+  if (loads.M) { svg += `<path d="M ${lx-14} ${ly+38} A 14 14 0 1 1 ${lx+10} ${ly+42}" fill="none" stroke="#a9772b" stroke-width="2"/><text x="${lx-4}" y="${ly+62}" fill="#a9772b">M=${loads.M}</text>`; }
+  if (loads.q) { const [mx, my] = pt(phiMax/2); svg += `<text x="${mx}" y="${my-12}" fill="#27632a" text-anchor="middle">q=${loads.q} (na całym łuku)</text>`; }
   svg += `</g>`;
   svg += `<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="7" orient="auto"><polygon points="0,0 8,0 4,8" fill="#b6312a"/></marker></defs>`;
   $('scheme').innerHTML = svg;
+}
+
+const LOAD_LABEL_PL = { P: 'siła skupiona P', M: 'moment skupiony M', q: 'obciążenie ciągłe q' };
+const vfrac = (n, d) => `<span class="vfrac"><span>${n}</span><span>${d}</span></span>`;
+
+// Buduje treść czterech "Kroków" raportu (zwraca surowe HTML-fragmenty per krok) —
+// patrz komentarz przy FORMULA co do roli `dir`.
+function buildStepsHTML({ loads, dir, target, phiMaxDeg, res }) {
+  const activeKeys = ['P', 'M', 'q'].filter(k => loads[k]);
+  const virtKey = targetVirtualKey(target);
+  const virtSymbol = virtKey === 'P' ? 'P̄' : 'M̄';
+  const targetSymbol = target === 'deflection' ? 'δ' : 'θ';
+  const phiMaxRad = phiMaxDeg * Math.PI / 180;
+  const phiMaxStr = `${fmt(phiMaxDeg, 1)}° = ${fmt(phiMaxRad, 4)} rad`;
+
+  // Krok 1: momenty od rzeczywistych obciążeń (per obciążenie + superpozycja, jeśli >1 aktywne).
+  const mzRealTerms = [], msRealTerms = [];
+  let step1 = '';
+  activeKeys.forEach(k => {
+    const f = FORMULA[k];
+    const mzStr = termStr(f.mzSign, k, f.mzBody);
+    const msStr = termStr(f.msSign * dir, k, f.msBody);
+    mzRealTerms.push(mzStr); msRealTerms.push(msStr);
+    step1 += `<div class="loadhdr">Obciążenie: ${LOAD_LABEL_PL[k]} (${k} = ${fmt(loads[k], 2)})</div>
+      <div class="eq">M<sub>z</sub> = ${mzStr}</div>
+      <div class="eq">M<sub>s</sub> = ${msStr}</div>`;
+  });
+  if (activeKeys.length > 1) {
+    step1 += `<div class="loadhdr">Superpozycja (suma od wszystkich obciążeń):</div>
+      <div class="eq big">M<sub>z</sub> = ${joinTerms(mzRealTerms)}</div>
+      <div class="eq big">M<sub>s</sub> = ${joinTerms(msRealTerms)}</div>`;
+  }
+
+  // Krok 2: momenty od obciążenia jednostkowego (wirtualnego), zgodnego z szukaną wielkością.
+  const vf = FORMULA[virtKey];
+  const vmzStr = termStr(vf.mzSign, '1', vf.mzBody);
+  const vmsStr = termStr(vf.msSign * dir, '1', vf.msBody);
+  const step2 = `<div class="loadhdr">Obciążenie jednostkowe: ${virtSymbol} = 1 (${target === 'deflection' ? 'odpowiada szukanemu ugięciu' : 'odpowiada szukanemu kątowi obrotu'})</div>
+    <div class="eq">M̄<sub>z</sub> = ${vmzStr}</div>
+    <div class="eq">M̄<sub>s</sub> = ${vmsStr}</div>`;
+
+  // Krok 3: ogólny wzór Maxwella-Mohra, a potem to samo z podstawionymi wzorami z Kroku 1-2.
+  const sumMz = mzRealTerms.length > 1 ? `(${joinTerms(mzRealTerms)})` : mzRealTerms[0];
+  const sumMs = msRealTerms.length > 1 ? `(${joinTerms(msRealTerms)})` : msRealTerms[0];
+  const step3 = `
+    <div class="eq big">${targetSymbol} = (1/EJ)·[ ∫<sub>0</sub><sup>φmax</sup> M<sub>z</sub>·M̄<sub>z</sub> ds + ${vfrac('EJ','GC')}· ∫<sub>0</sub><sup>φmax</sup> M<sub>s</sub>·M̄<sub>s</sub> ds ]</div>
+    <div class="lead">gdzie ds = R·dφ, φmax = ${phiMaxStr}. Po podstawieniu wzorów z Kroku 1 i 2:</div>
+    <div class="eq">${targetSymbol} = (1/EJ)·[ ∫<sub>0</sub><sup>φmax</sup> ${sumMz}·(${vmzStr})·R dφ + ${vfrac('EJ','GC')}· ∫<sub>0</sub><sup>φmax</sup> ${sumMs}·(${vmsStr})·R dφ ]</div>`;
+
+  // Krok 4: liczbowy wynik silnika (całkowanie numeryczne), rozbity na człony superpozycji.
+  const step4terms = res.terms.map(t => {
+    const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
+    return `<div class="eq">wkład od ${t.key}: ${fmt(t.coeff, 5)} · (${t.key}·R${rPow})/EJ = <b>${fmt(t.contribution, 5)}</b> / EJ</div>`;
+  }).join('');
+  const step4 = `${step4terms}<div class="result-line">Wynik: ${targetSymbol} = ${fmt(res.total, 5)} / EJ</div>`;
+
+  return { step1, step2, step3, step4 };
 }
 
 function render() {
@@ -303,6 +426,7 @@ function render() {
   const unit = $('unit').value;
   const phiMaxDeg = num('phiMaxDeg', 90);
   const ejgc = num('ejgc', 1.3);
+  const dir = $('dir').value === 'left' ? -1 : 1;
   const loads = {
     P: $('useP').checked ? num('P', 0) : 0,
     M: $('useM').checked ? num('M', 0) : 0,
@@ -310,7 +434,7 @@ function render() {
   };
   const target = document.querySelector('input[name=target]:checked').value;
 
-  drawScheme(R, phiMaxDeg, loads);
+  drawScheme(R, phiMaxDeg, loads, dir);
 
   const out = $('out');
   if (phiMaxDeg <= 0 || phiMaxDeg > 360) {
@@ -322,18 +446,18 @@ function render() {
     return;
   }
 
-  const res = computeAll({ R, phiMaxDeg, ejgc, loads, target });
+  const res = computeAll({ R, phiMaxDeg, ejgc, loads, target, dir });
   const targetLabel = target === 'deflection' ? 'Ugięcie δ w φ=0 (na kierunku P)' : 'Kąt obrotu θ w φ=0 (na kierunku M)';
+  const steps = buildStepsHTML({ loads, dir, target, phiMaxDeg, res });
 
-  let html = `<div class="result-const">
-    <div class="ttl">${targetLabel}</div>`;
-  res.terms.forEach(t => {
-    const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
-    html += `<div class="term">wkład od ${t.key}: <b>${fmt(t.coeff, 5)}</b> · (${t.key}·R${rPow})/EJ &nbsp;=&nbsp; <b>${fmt(t.contribution, 5)}</b> / EJ</div>`;
-  });
-  html += `<div class="total">Wynik: ${fmt(res.total, 5)} / EJ &nbsp; <span style="font-size:.8rem;color:var(--muted)">[${unit}, EJ symbolicznie]</span></div>
+  let html = `<h2 class="sec"><span class="n">»</span>${targetLabel} — krok po kroku</h2>
+  <div class="steps">
+    <div class="step"><div class="stitle"><span class="num">1</span>Rozkład momentów M<sub>z</sub> i M<sub>s</sub> od obciążeń zewnętrznych</div>${steps.step1}</div>
+    <div class="step"><div class="stitle"><span class="num">2</span>Rozkład momentów od obciążenia jednostkowego</div>${steps.step2}</div>
+    <div class="step"><div class="stitle"><span class="num">3</span>Zestawienie całki (zasada prac wirtualnych)</div>${steps.step3}</div>
+    <div class="step"><div class="stitle"><span class="num">4</span>Wynik końcowy</div>${steps.step4}</div>
   </div>
-  <div class="note">Każdy wiersz to osobny człon superpozycji: stała·(obciążenie·R<sup>n</sup>)/EJ, gdzie n wynika z analizy wymiarowej (patrz przykład z instrukcji: M·R²/EJ dla wkładu momentu M do ugięcia). Suma członów = całkowite przemieszczenie / EJ.</div>`;
+  <div class="note">Jednostka długości: ${unit}; EJ pozostaje symboliczne (nie podano jego wartości liczbowej, tylko stosunek EJ/GC).</div>`;
 
   html += `<h2 class="sec"><span class="n">✓</span>Tabela weryfikacyjna — Mz, Ms (rzeczywiste)</h2>
   <table class="vals"><thead><tr><th>φ</th><th>Mz</th><th>Ms</th></tr></thead><tbody>`;
@@ -346,7 +470,7 @@ function render() {
   out.innerHTML = html;
 }
 
-['R','unit','phiMaxDeg','ejgc','useP','P','useM','M','useQ','q'].forEach(id => {
+['R','unit','phiMaxDeg','ejgc','dir','useP','P','useM','M','useQ','q'].forEach(id => {
   $(id).addEventListener('input', render);
   $(id).addEventListener('change', render);
 });

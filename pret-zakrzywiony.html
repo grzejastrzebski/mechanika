@@ -318,21 +318,20 @@ function fmt(x, d = 4) {
   return x.toFixed(d);
 }
 
-// Utwierdzenie jest zawsze na dole schematu; pręt wygina się od niego w stronę `dir`
-// (+1 = w prawo, -1 = w lewo) do końca swobodnego (φ=0). Kąt fizyczny φ (od końca
-// swobodnego) jest mapowany na kąt geometryczny rysunku tak, by φ=φmax (utwierdzenie)
-// zawsze wypadało "na dole" (kąt geometryczny -90°), niezależnie od φmax i kierunku.
+// Geometria "sklepienia" — łuk wypukły ku górze, środek krzywizny C jest zawsze POD prętem.
+// Koniec swobodny (φ=0, obciążenia) jest zakotwiczony na szczycie łuku (kąt geometryczny 90°,
+// czyli wprost nad C). Utwierdzenie (φ=φmax) wypada po przeciwnej stronie — w prawo i niżej dla
+// `dir=+1` ("w prawo": φ rośnie w lewo→prawo, zgodnie z ruchem wskazówek zegara patrząc od C),
+// w lewo i niżej dla `dir=-1` ("w lewo": φ rośnie w prawo→lewo, przeciwnie do wskazówek zegara).
 function drawScheme(R, phiMaxDeg, loads, dir) {
-  const W = 520, H = 300, cx = W / 2, Rpx = 120;
+  const W = 520, H = 300, cx = W / 2, Rpx = 110, apexY = 66;
+  const cy = apexY + Rpx;
   const phiMax = phiMaxDeg * Math.PI / 180;
-  const supportY = H - 36;
-  const cy = supportY - Rpx;
-  const geomAngle = physicsPhi => -Math.PI / 2 + dir * (phiMax - physicsPhi);
+  const geomAngle = physicsPhi => Math.PI / 2 - dir * physicsPhi;
   const pt = physicsPhi => { const a = geomAngle(physicsPhi); return [cx + Rpx * Math.cos(a), cy - Rpx * Math.sin(a)]; };
-  const [x0, y0] = pt(0);          // koniec swobodny (obciążenia)
-  const [x1, y1] = pt(phiMax);     // utwierdzenie — zawsze (cx, supportY)
-  // kierunek promieniowy "na zewnątrz" w końcu swobodnym — do rozstawienia etykiet obciążeń
-  const a0 = geomAngle(0), outx = Math.cos(a0), outy = -Math.sin(a0);
+  const [x0, y0] = pt(0);          // koniec swobodny — zawsze na szczycie łuku (x0=cx, y0=apexY)
+  const [x1, y1] = pt(phiMax);     // utwierdzenie
+  const angFree = geomAngle(0), angSupp = geomAngle(phiMax);
 
   let svg = `<g font-family="ui-monospace,monospace" font-size="11">`;
   // łuk pręta — rysowany punktowo (bez flag SVG "arc"), żeby uniknąć błędów kierunku/zwrotu łuku
@@ -340,24 +339,31 @@ function drawScheme(R, phiMaxDeg, loads, dir) {
   let pathD = '';
   for (let k = 0; k <= N; k++) { const [px, py] = pt(phiMax * k / N); pathD += (k === 0 ? 'M ' : 'L ') + px.toFixed(1) + ' ' + py.toFixed(1) + ' '; }
   svg += `<path d="${pathD}" fill="none" stroke="#16243a" stroke-width="4"/>`;
-  // środek koła + promień pomocniczy (do końca swobodnego)
+  // środek krzywizny (pod łukiem) + promień przerywaną linią do końca swobodnego
   svg += `<circle cx="${cx}" cy="${cy}" r="2.5" fill="#5a6b80"/>`;
   svg += `<line x1="${cx}" y1="${cy}" x2="${x0}" y2="${y0}" stroke="#5a6b80" stroke-width="1" stroke-dasharray="3,3"/>`;
-  svg += `<text x="${(cx+x0)/2}" y="${(cy+y0)/2 - 6}" fill="#5a6b80">R</text>`;
-  // utwierdzenie — zawsze poziome kreskowanie na dole (promień w tym punkcie jest zawsze pionowy)
-  const wallLen = 30;
-  svg += `<line x1="${cx-wallLen}" y1="${supportY}" x2="${cx+wallLen}" y2="${supportY}" stroke="#16243a" stroke-width="3"/>`;
+  svg += `<text x="${cx+8}" y="${(cy+y0)/2+4}" fill="#5a6b80">R</text>`;
+  // łuk kąta φ przy środku krzywizny, zaczynający się od końca swobodnego
+  const ar = 22, sweepFlag = dir > 0 ? 0 : 1, largeFlag = Math.abs(phiMax) > Math.PI ? 1 : 0;
+  const ax0 = cx + ar*Math.cos(angFree), ay0 = cy - ar*Math.sin(angFree);
+  const ax1 = cx + ar*Math.cos(angSupp), ay1 = cy - ar*Math.sin(angSupp);
+  svg += `<path d="M ${ax0.toFixed(1)} ${ay0.toFixed(1)} A ${ar} ${ar} 0 ${largeFlag} ${sweepFlag} ${ax1.toFixed(1)} ${ay1.toFixed(1)}" fill="none" stroke="#1f3a93" stroke-width="1.2"/>`;
+  const midA = (angFree + angSupp) / 2;
+  svg += `<text x="${cx+(ar+13)*Math.cos(midA)}" y="${cy-(ar+13)*Math.sin(midA)+4}" fill="#1f3a93" text-anchor="middle">φ</text>`;
+  // utwierdzenie w punkcie podparcia — kreskowanie dopasowane do stycznej łuku w tym punkcie
+  const nx = Math.cos(angSupp), ny = -Math.sin(angSupp), tx_ = -ny, ty_ = nx, wallLen = 28;
+  svg += `<line x1="${x1-tx_*wallLen}" y1="${y1-ty_*wallLen}" x2="${x1+tx_*wallLen}" y2="${y1+ty_*wallLen}" stroke="#16243a" stroke-width="3"/>`;
   for (let k = -3; k <= 3; k++) {
-    const bx = cx + wallLen*(k/3.4);
-    svg += `<line x1="${bx}" y1="${supportY}" x2="${bx}" y2="${supportY+10}" stroke="#16243a" stroke-width="1.5"/>`;
+    const bx = x1 + tx_*wallLen*(k/3.4), by = y1 + ty_*wallLen*(k/3.4);
+    svg += `<line x1="${bx}" y1="${by}" x2="${bx+nx*10}" y2="${by+ny*10}" stroke="#16243a" stroke-width="1.5"/>`;
   }
-  svg += `<text x="${cx}" y="${supportY+24}" fill="#5a6b80" text-anchor="middle">utwierdzenie (φ=φmax)</text>`;
-  // obciążenia w phi=0 (koniec swobodny) — etykiety rozstawione wzdłuż kierunku "na zewnątrz" łuku
+  svg += `<text x="${x1+nx*24}" y="${y1+ny*24}" fill="#5a6b80" text-anchor="middle">utwierdzenie (φ=φmax)</text>`;
+  // obciążenia w phi=0 (koniec swobodny, zawsze na szczycie — etykiety rozstawione w górę)
   svg += `<circle cx="${x0}" cy="${y0}" r="4" fill="#fff" stroke="#1f3a93" stroke-width="1.5"/>`;
-  svg += `<text x="${x0+outx*14}" y="${y0+outy*14-6}" fill="#1f3a93" text-anchor="middle">φ=0</text>`;
-  const lx = x0 + outx*34, ly = y0 + outy*34;
-  if (loads.P) { svg += `<line x1="${lx}" y1="${ly+22}" x2="${lx}" y2="${ly-4}" stroke="#b6312a" stroke-width="2" marker-end="url(#ah)"/><text x="${lx+8}" y="${ly+18}" fill="#b6312a">P=${loads.P}</text>`; }
-  if (loads.M) { svg += `<path d="M ${lx-14} ${ly+38} A 14 14 0 1 1 ${lx+10} ${ly+42}" fill="none" stroke="#a9772b" stroke-width="2"/><text x="${lx-4}" y="${ly+62}" fill="#a9772b">M=${loads.M}</text>`; }
+  svg += `<text x="${x0+10}" y="${y0-2}" fill="#1f3a93">φ=0</text>`;
+  const ly = y0 - 16;
+  if (loads.P) { svg += `<line x1="${x0}" y1="${ly}" x2="${x0}" y2="${ly-26}" stroke="#b6312a" stroke-width="2" marker-end="url(#ah)"/><text x="${x0+8}" y="${ly-20}" fill="#b6312a">P=${loads.P}</text>`; }
+  if (loads.M) { svg += `<path d="M ${x0-14} ${ly+10} A 14 14 0 1 1 ${x0+10} ${ly+14}" fill="none" stroke="#a9772b" stroke-width="2"/><text x="${x0-4}" y="${ly+34}" fill="#a9772b">M=${loads.M}</text>`; }
   if (loads.q) { const [mx, my] = pt(phiMax/2); svg += `<text x="${mx}" y="${my-12}" fill="#27632a" text-anchor="middle">q=${loads.q} (na całym łuku)</text>`; }
   svg += `</g>`;
   svg += `<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="7" orient="auto"><polygon points="0,0 8,0 4,8" fill="#b6312a"/></marker></defs>`;

@@ -2,3 +2,6 @@
 .git
 .gitignore
 .assetsignore
+
+# Skrypt startowy (lokalne uruchamianie pracy) — nie publikowac
+start.ps1

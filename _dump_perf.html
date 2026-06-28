@@ -1,0 +1,64 @@
+﻿<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body style="margin:0">
+<div id="out" style="font-family:monospace;font-size:13px;white-space:pre;padding:10px">imported hex loop, 2 full supports, n expected = 3*6+6-3*6 = 6
+clicking Oblicz/Dalej at 2678ms...
+click() returned synchronously after 0ms
+check at +2s after click: n badge = n = 6
+stage2 reached: true
+</div>
+<iframe id="f" src="solver-rusztow.html" style="width:1400px;height:1100px;border:0"></iframe>
+<script>
+const out = document.getElementById('out');
+function log(s) { out.textContent += s + "\n"; }
+function q(win, txt) { return [...win.document.querySelectorAll('button')].find(b => b.textContent.toLowerCase().includes(txt.toLowerCase())); }
+
+const schema = {
+  schemaVersion: 2, name: 'hexloop', savedAt: new Date().toISOString(),
+  nodes: [ {id:'A',x:0,y:0}, {id:'B',x:2,y:0}, {id:'C',x:3,y:1.5}, {id:'D',x:2,y:3}, {id:'E',x:0,y:3}, {id:'F',x:-1,y:1.5} ],
+  elements: [
+    {id:1,n1:'A',n2:'B',EI:1,GJ:1}, {id:2,n1:'B',n2:'C',EI:1,GJ:1}, {id:3,n1:'C',n2:'D',EI:1,GJ:1},
+    {id:4,n1:'D',n2:'E',EI:1,GJ:1}, {id:5,n1:'E',n2:'F',EI:1,GJ:1}, {id:6,n1:'F',n2:'A',EI:1,GJ:1},
+  ],
+  supports: [ {node:'A', z:true, rx:true, ry:true}, {node:'D', z:true, rx:true, ry:true} ],
+  statesData: [ {loads:[{node:'C', Fz:-1, Mx:0, My:0}], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}} ],
+  symbolic: {enabled:false}
+};
+function doImport(win, schema) {
+  const origCreate = win.document.createElement.bind(win.document);
+  win.document.createElement = function(tag) {
+    const el = origCreate(tag);
+    if (tag.toLowerCase() === 'input') {
+      el.click = function() {
+        const file = new win.File([JSON.stringify(schema)], 'test.json', {type:'application/json'});
+        const dt = new win.DataTransfer();
+        dt.items.add(file);
+        Object.defineProperty(el, 'files', {value: dt.files, configurable:true});
+        el.dispatchEvent(new win.Event('change', {bubbles:true}));
+      };
+    }
+    return el;
+  };
+  const importBtn = q(win, 'wczytaj');
+  if (importBtn) importBtn.click();
+  win.document.createElement = origCreate;
+}
+const f = document.getElementById('f');
+f.onload = () => {
+  const w = f.contentWindow;
+  w.addEventListener('error', e => log('WINDOW ERROR: ' + e.message));
+  setTimeout(() => { doImport(w, schema); log('imported hex loop, 2 full supports, n expected = 3*6+6-3*6 = 6'); }, 500);
+  setTimeout(() => {
+    log('clicking Oblicz/Dalej at ' + performance.now().toFixed(0) + 'ms...');
+    const t0 = performance.now();
+    window.__t0 = t0;
+    const b = q(w, 'Oblicz / Dalej'); if (b) b.click();
+    log('click() returned synchronously after ' + (performance.now()-t0).toFixed(0) + 'ms');
+  }, 1100);
+  setTimeout(() => {
+    log('check at +2s after click: n badge = ' + ([...w.document.querySelectorAll('span')].find(s=>/^n = /.test(s.textContent))?.textContent || 'n/a'));
+    log('stage2 reached: ' + !!([...w.document.querySelectorAll('span')].find(s => /sprawdzonych kombinacji/.test(s.textContent))));
+  }, 3100);
+};
+</script>
+
+</body></html>

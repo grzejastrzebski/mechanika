@@ -741,6 +741,11 @@ function getInternalReleaseCandidates(nodes, elements) {
   return items;
 }
 
+function candidateKey(rc) {
+  if (rc.kind === 'internal') return `i:${rc.elementId}:${rc.relKey}:${rc.relType}`;
+  return `s:${rc.node}:${rc.dof}`;
+}
+
 // Sprawdza geometryczną niezmienność układu podstawowego (po zwolnieniu więzów), UWZGLĘDNIAJĄC
 // przeguby (elementy z release1/release2 wnoszą zerową sztywność na zwolnionych składowych —
 // jeśli to one są jedynym źródłem sztywności dla danego DOF węzła, usunięcie odpowiadającej
@@ -2177,12 +2182,23 @@ function App() {
 
   const staticInfo = useMemo(() => computeStaticDegree(nodes, elements, supports), [nodes, elements, supports]);
   const basicSystem = useMemo(() => staticInfo ? proposeBasicSystem(supports, staticInfo.n) : [], [supports, staticInfo]);
+  const allCandidates = useMemo(() =>
+    [...getAllConstraints(supports), ...getInternalReleaseCandidates(nodes, elements)],
+    [supports, nodes, elements]
+  );
 
   // Przepływ etapowy
   const [appStage, setAppStage] = useState(1);
   const [basicSystemOptions, setBSOptions] = useState([]);
   const [bsTotalChecked, setBsTotalChecked] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
+  const [manualMode, setManualMode] = useState(false);
+  const [manualSelection, setManualSelection] = useState([]);
+  const manualSystemStatus = useMemo(() => {
+    if (!manualMode || !staticInfo || manualSelection.length !== staticInfo.n) return null;
+    const {supports: tempS, elements: tempE} = applyComboToModel(supports, elements, manualSelection);
+    return isGeometricallyStable(tempS, nodes, tempE) ? 'stable' : 'unstable';
+  }, [manualMode, manualSelection, staticInfo, supports, elements, nodes]);
 
   // Wiersze podpór wymuszone na "Własna" (checkboxy), nawet gdy aktualna kombinacja
   // z/rx/ry pasuje akurat do jednego z presetów — inaczej kontrolowany <select> wracałby
@@ -2223,20 +2239,37 @@ function App() {
       setError(`Brak geometrycznie niezmiennych układów podstawowych (sprawdzono ${total} kombinacji, w tym rozcięcia wewnętrzne). Sprawdź podpory i przeguby.`);
       return;
     }
-    setBSOptions(valid); setBsTotalChecked(total); setSelectedOption(0); setAppStage(2);
+    setBSOptions(valid); setBsTotalChecked(total); setSelectedOption(0); setManualMode(false); setManualSelection([]); setAppStage(2);
   }, [nodes, elements, supports, statesData]);
 
   const goToStage3 = useCallback(() => {
-    if (selectedOption === null || !basicSystemOptions[selectedOption]) return;
     setError(null);
-    const combo = basicSystemOptions[selectedOption];
+    let comboRemoved;
+    if (manualMode) {
+      if (!staticInfo || manualSelection.length !== staticInfo.n) {
+        setError(`Zaznacz dokładnie ${staticInfo?.n ?? '?'} więz${staticInfo?.n === 1 ? '' : staticInfo?.n < 5 ? 'y' : 'ów'} do zwolnienia.`);
+        return;
+      }
+      if (manualSystemStatus !== 'stable') {
+        setError('Wybrany układ jest chwiejny (mechanizm). Zmień wybór zwolnień.');
+        return;
+      }
+      comboRemoved = manualSelection.map((rc, i) => ({
+        ...rc,
+        xi: 'X' + (XI_SUB[i] || (i + 1)),
+        stateIdx: i + 1,
+      }));
+    } else {
+      if (selectedOption === null || !basicSystemOptions[selectedOption]) return;
+      comboRemoved = basicSystemOptions[selectedOption].removed;
+    }
     const newSupports = supports.map(s => ({...s}));
     const newElements = elements.map(el => ({
       ...el,
       release1: el.release1 ? {...el.release1} : undefined,
       release2: el.release2 ? {...el.release2} : undefined,
     }));
-    combo.removed.forEach(rc => {
+    comboRemoved.forEach(rc => {
       if (rc.kind === 'internal') {
         const el = newElements.find(e => e.id === rc.elementId);
         if (!el) return;
@@ -2250,7 +2283,7 @@ function App() {
     const filteredSupports = newSupports.filter(s => s.z || s.rx || s.ry);
     const newStatesData = statesData.map((s, i) => {
       if (i === 0) return s;
-      const rc = combo.removed[i - 1];
+      const rc = comboRemoved[i - 1];
       if (!rc) return {loads: [], elementQ: {}, internalUnitLoad: null};
       if (rc.kind === 'internal') {
         return {
@@ -2270,7 +2303,7 @@ function App() {
       const res = computeAll(nodes, newElements, filteredSupports, newStatesData);
       setResults(res); setViewMode('mz'); setAppStage(3);
     } catch (e) { setError(e.message); setResults(null); }
-  }, [selectedOption, basicSystemOptions, supports, statesData, nodes, elements]);
+  }, [manualMode, manualSelection, manualSystemStatus, staticInfo, selectedOption, basicSystemOptions, supports, statesData, nodes, elements]);
 
   const handlePrimaryAction = () => {
     if (appStage === 1) goToStage2();
@@ -2319,10 +2352,10 @@ function App() {
       const gj = parseFloat(firstEl.GJ) || 1;
       setEjGcRatioState(ei / gj);
     }
-    setActiveState(0); setAppStage(1); setBSOptions([]); setBsTotalChecked(0); setSelectedOption(null);
+    setActiveState(0); setAppStage(1); setBSOptions([]); setBsTotalChecked(0); setSelectedOption(null); setManualMode(false); setManualSelection([]);
     setResults(null); setError(null); setViewMode('structure'); resetView();
   };
-  const reset = () => { setNodes([]); setElements([]); setSupports([]); setStatesData([{loads:[], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}}]); setActiveState(0); setResults(null); setError(null); setViewMode('structure'); resetView(); setAppStage(1); setBSOptions([]); setBsTotalChecked(0); setSelectedOption(null); };
+  const reset = () => { setNodes([]); setElements([]); setSupports([]); setStatesData([{loads:[], elementQ:{}}, {loads:[], elementQ:{}}, {loads:[], elementQ:{}}]); setActiveState(0); setResults(null); setError(null); setViewMode('structure'); resetView(); setAppStage(1); setBSOptions([]); setBsTotalChecked(0); setSelectedOption(null); setManualMode(false); setManualSelection([]); };
   const addNode = () => { setNodes([...nodes, {id: String.fromCharCode(65+nodes.length), x:0, y:0}]); };
   const updateNode = (i,k,v) => { const n=[...nodes]; n[i]={...n[i],[k]:v}; setNodes(n); };
   const removeNode = (i) => {
@@ -2533,60 +2566,129 @@ function App() {
                 )}
                 {staticInfo && <span className="text-[10px] font-mono text-slate-500">3·{staticInfo.m} + {staticInfo.r} − 3·{staticInfo.w}{staticInfo.h ? ` − ${staticInfo.h}` : ''} = {staticInfo.n}</span>}
               </div>
-              <div className="mt-1 text-[11px] text-slate-400">Inteligentny generator: pula obejmuje podpory ORAZ rozcięcia wewnętrzne (Mg/Ms/T) na prętach w obwodach zamkniętych. Pokazano do 5 najbardziej logicznych, stabilnych propozycji. Stany jednostkowe zostaną wypełnione automatycznie po wyborze.</div>
             </div>
-            <div className="p-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'420px'}}>
-              {basicSystemOptions.map((opt, idx) => {
-                const hasInternal = opt.removed.some(rc => rc.kind === 'internal');
-                return (
-                <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${selectedOption===idx ? 'border-cyan-600/60 bg-cyan-950/20 ring-1 ring-cyan-600/30' : 'border-slate-700/50 bg-slate-900/30 hover:border-slate-600'}`}>
-                  <input type="radio" name="basicSystem" checked={selectedOption===idx} onChange={()=>setSelectedOption(idx)} className="mt-1 accent-cyan-400 flex-shrink-0"/>
-                  <div className="flex items-start gap-3 flex-1 min-w-0 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-2">
-                        <span>Opcja {idx+1} — zwolnij {opt.removed.length} więz{opt.removed.length===1?'':opt.removed.length<5?'y':'ów'}:</span>
-                        {hasInternal && <span className="text-amber-600 normal-case font-semibold">zawiera rozcięcie wewnętrzne</span>}
-                      </div>
-                      <div className="space-y-1.5">
-                        {opt.removed.map((rc, i) => {
-                          const colors = ['text-violet-300','text-pink-300','text-amber-300'];
-                          const bgs = ['bg-violet-950/40 ring-violet-700/40','bg-pink-950/40 ring-pink-700/40','bg-amber-950/40 ring-amber-700/40'];
-                          if (rc.kind === 'internal') {
-                            return (
-                              <div key={i} className="text-sm font-mono leading-snug">
-                                <span className={`font-bold ${colors[i]||'text-slate-300'}`}>{rc.xi}</span>
-                                <span className="text-slate-400"> = rozcięcie {rc.constraint}</span>
-                                <div className={`inline-block ml-2 text-[10px] px-1.5 py-px rounded ring-1 ${bgs[i]||'bg-slate-800 ring-slate-700'} ${colors[i]||'text-slate-400'}`}>
-                                  Stan {rc.stateIdx}: {rc.relType==='mg'?'Mg':rc.relType==='ms'?'Ms':'T'}=1 w pręcie {rc.elementId} (koniec {rc.node})
+            <div className="border-b border-slate-800 px-4 py-2 flex gap-2 bg-white">
+              <button onClick={() => setManualMode(false)} className={`text-xs px-3 py-1.5 rounded font-semibold transition-colors ${!manualMode ? 'bg-amber-500/20 text-amber-200 ring-1 ring-amber-500/40' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Zaproponowane przez AI</button>
+              <button onClick={() => setManualMode(true)} className={`text-xs px-3 py-1.5 rounded font-semibold transition-colors ${manualMode ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>Zbuduj własny układ</button>
+            </div>
+            {!manualMode ? (
+              <>
+                <div className="px-4 py-2 text-[11px] text-slate-400 border-b border-slate-800">Inteligentny generator: pula obejmuje podpory ORAZ rozcięcia wewnętrzne (Mg/Ms/T) na prętach w obwodach zamkniętych. Pokazano do 5 najbardziej logicznych, stabilnych propozycji. Stany jednostkowe zostaną wypełnione automatycznie po wyborze.</div>
+                <div className="p-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'360px'}}>
+                  {basicSystemOptions.map((opt, idx) => {
+                    const hasInternal = opt.removed.some(rc => rc.kind === 'internal');
+                    return (
+                    <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${selectedOption===idx ? 'border-cyan-600/60 bg-cyan-950/20 ring-1 ring-cyan-600/30' : 'border-slate-700/50 bg-slate-900/30 hover:border-slate-600'}`}>
+                      <input type="radio" name="basicSystem" checked={selectedOption===idx} onChange={()=>setSelectedOption(idx)} className="mt-1 accent-cyan-400 flex-shrink-0"/>
+                      <div className="flex items-start gap-3 flex-1 min-w-0 flex-wrap">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-2">
+                            <span>Opcja {idx+1} — zwolnij {opt.removed.length} więz{opt.removed.length===1?'':opt.removed.length<5?'y':'ów'}:</span>
+                            {hasInternal && <span className="text-amber-600 normal-case font-semibold">zawiera rozcięcie wewnętrzne</span>}
+                          </div>
+                          <div className="space-y-1.5">
+                            {opt.removed.map((rc, i) => {
+                              const colors = ['text-violet-300','text-pink-300','text-amber-300'];
+                              const bgs = ['bg-violet-950/40 ring-violet-700/40','bg-pink-950/40 ring-pink-700/40','bg-amber-950/40 ring-amber-700/40'];
+                              if (rc.kind === 'internal') {
+                                return (
+                                  <div key={i} className="text-sm font-mono leading-snug">
+                                    <span className={`font-bold ${colors[i]||'text-slate-300'}`}>{rc.xi}</span>
+                                    <span className="text-slate-400"> = rozcięcie {rc.constraint}</span>
+                                    <div className={`inline-block ml-2 text-[10px] px-1.5 py-px rounded ring-1 ${bgs[i]||'bg-slate-800 ring-slate-700'} ${colors[i]||'text-slate-400'}`}>
+                                      Stan {rc.stateIdx}: {rc.relType==='mg'?'Mg':rc.relType==='ms'?'Ms':'T'}=1 w pręcie {rc.elementId} (koniec {rc.node})
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div key={i} className="text-sm font-mono leading-snug">
+                                  <span className={`font-bold ${colors[i]||'text-slate-300'}`}>{rc.xi}</span>
+                                  <span className="text-slate-400"> = zwolnij {rc.constraint}</span>
+                                  <div className={`inline-block ml-2 text-[10px] px-1.5 py-px rounded ring-1 ${bgs[i]||'bg-slate-800 ring-slate-700'} ${colors[i]||'text-slate-400'}`}>
+                                    Stan {rc.stateIdx}: {rc.dof==='z'?`Fz=1 w węźle ${rc.node}`:rc.dof==='rx'?`Mx=1 w węźle ${rc.node}`:`My=1 w węźle ${rc.node}`}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div key={i} className="text-sm font-mono leading-snug">
-                              <span className={`font-bold ${colors[i]||'text-slate-300'}`}>{rc.xi}</span>
-                              <span className="text-slate-400"> = zwolnij {rc.constraint}</span>
-                              <div className={`inline-block ml-2 text-[10px] px-1.5 py-px rounded ring-1 ${bgs[i]||'bg-slate-800 ring-slate-700'} ${colors[i]||'text-slate-400'}`}>
-                                Stan {rc.stateIdx}: {rc.dof==='z'?`Fz=1 w węźle ${rc.node}`:rc.dof==='rx'?`Mx=1 w węźle ${rc.node}`:`My=1 w węźle ${rc.node}`}
-                              </div>
-                            </div>
-                          );
-                        })}
+                              );
+                            })}
+                          </div>
+                          <button onClick={()=>setSelectedOption(idx)} className={`mt-2 text-[11px] px-2.5 py-1 rounded font-semibold transition-colors ${selectedOption===idx ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                            {selectedOption===idx ? '✓ Wybrano ten układ' : 'Wybierz ten układ'}
+                          </button>
+                        </div>
                       </div>
-                      <button onClick={()=>setSelectedOption(idx)} className={`mt-2 text-[11px] px-2.5 py-1 rounded font-semibold transition-colors ${selectedOption===idx ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
-                        {selectedOption===idx ? '✓ Wybrano ten układ' : 'Wybierz ten układ'}
-                      </button>
                     </div>
-                  </div>
+                    );
+                  })}
                 </div>
-                );
-              })}
-            </div>
-            {staticInfo && staticInfo.n > 2 && (
-              <div className="px-4 pb-3 text-[11px] text-rose-400">⚠ n &gt; 2 — interfejs obsługuje do n = 2. Zostaną wypełnione tylko X₁ i X₂.</div>
+                {staticInfo && staticInfo.n > 2 && (
+                  <div className="px-4 pb-3 text-[11px] text-rose-400">⚠ n &gt; 2 — interfejs obsługuje do n = 2. Zostaną wypełnione tylko X₁ i X₂.</div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="px-4 py-2 text-[11px] text-slate-400 border-b border-slate-800">
+                  Zaznacz dokładnie <strong className="text-amber-300">{staticInfo?.n} więz{staticInfo?.n===1?'':staticInfo?.n<5?'y':'ów'}</strong> do zwolnienia. Stabilność jest sprawdzana na bieżąco.
+                </div>
+                <div className="p-3 overflow-y-auto" style={{maxHeight:'320px'}}>
+                  {(() => {
+                    const n = staticInfo?.n ?? 0;
+                    const supportCands = allCandidates.filter(c => c.kind === 'support');
+                    const internalCands = allCandidates.filter(c => c.kind === 'internal');
+                    const renderTile = (c, key) => {
+                      const ckey = candidateKey(c);
+                      const isSelected = manualSelection.some(s => candidateKey(s) === ckey);
+                      const isDisabled = !isSelected && manualSelection.length >= n;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            if (isSelected) {
+                              setManualSelection(prev => prev.filter(s => candidateKey(s) !== ckey));
+                            } else if (!isDisabled) {
+                              setManualSelection(prev => [...prev, c]);
+                            }
+                          }}
+                          className={`text-left w-full p-2 rounded border text-xs font-mono transition-colors ${isSelected ? 'border-cyan-600/60 bg-cyan-950/30 text-cyan-300 ring-1 ring-cyan-600/30' : isDisabled ? 'border-slate-800 bg-slate-950/20 text-slate-600 cursor-not-allowed' : 'border-slate-700/50 bg-slate-900/20 text-slate-300 hover:border-slate-500 hover:bg-slate-800/40'}`}
+                        >
+                          <span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">{c.kind === 'internal' ? 'rozcięcie' : 'podpora'}</span>
+                          {c.label}
+                        </button>
+                      );
+                    };
+                    return (
+                      <div className="space-y-3">
+                        {supportCands.length > 0 && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">Więzy podporowe</div>
+                            <div className="grid grid-cols-2 gap-1.5">{supportCands.map((c, i) => renderTile(c, `s${i}`))}</div>
+                          </div>
+                        )}
+                        {internalCands.length > 0 && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">Rozcięcia wewnętrzne</div>
+                            <div className="grid grid-cols-2 gap-1.5">{internalCands.map((c, i) => renderTile(c, `i${i}`))}</div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="px-4 pb-3">
+                  {manualSystemStatus === 'stable' && (
+                    <div className="text-[11px] text-emerald-300 bg-emerald-950/30 border border-emerald-700/40 rounded px-3 py-1.5">✓ Układ jest geometrycznie niezmienny. Można kontynuować.</div>
+                  )}
+                  {manualSystemStatus === 'unstable' && (
+                    <div className="text-[11px] text-rose-300 bg-rose-950/30 border border-rose-700/40 rounded px-3 py-1.5">✗ Wybrane zwolnienia tworzą mechanizm (układ chwiejny)! Zmień wybór.</div>
+                  )}
+                  {manualSystemStatus === null && staticInfo && (
+                    <div className="text-[11px] text-slate-500">Zaznaczono {manualSelection.length} z {staticInfo.n} wymaganych zwolnień.</div>
+                  )}
+                </div>
+              </>
             )}
             <div className="border-t border-slate-800 px-4 py-2 flex items-center gap-2 text-[10px] text-slate-500">
-              <span>Pokazano {basicSystemOptions.length} najlepszych z {bsTotalChecked} sprawdzonych kombinacji (podpory + rozcięcia wewnętrzne)</span>
+              {!manualMode && <span>Pokazano {basicSystemOptions.length} najlepszych z {bsTotalChecked} sprawdzonych kombinacji (podpory + rozcięcia wewnętrzne)</span>}
               <button onClick={() => setAppStage(1)} className="ml-auto text-slate-500 hover:text-cyan-300 px-2 py-1 rounded hover:bg-slate-800">← Wróć do schematu</button>
             </div>
           </div>
@@ -2728,9 +2830,17 @@ function App() {
             <div className="mt-1 text-[11px] text-slate-400">Strzałka prosta = siła (X = Fz), strzałka łukowa = moment (X = Mx/My); kółko z literą = rozcięcie wewnętrzne pręta (g=Mg, s=Ms, T=siła tnąca).</div>
           </div>
           <div className="p-4 flex items-center justify-center" style={{minHeight:'360px'}}>
-            {selectedOption !== null && basicSystemOptions[selectedOption] ? (
-              <MiniBasicSystem nodes={nodes} elements={elements} supports={supports} removedConstraints={basicSystemOptions[selectedOption].removed} width={360} height={320}/>
-            ) : <span className="text-slate-500 text-sm">Wybierz kombinację z listy po lewej.</span>}
+            {manualMode ? (
+              manualSelection.length > 0 ? (
+                <MiniBasicSystem nodes={nodes} elements={elements} supports={supports}
+                  removedConstraints={manualSelection.map((rc, i) => ({...rc, xi: 'X'+(XI_SUB[i]||(i+1)), stateIdx: i+1}))}
+                  width={360} height={320}/>
+              ) : <span className="text-slate-500 text-sm">Zaznacz więzy po lewej by zbudować układ.</span>
+            ) : (
+              selectedOption !== null && basicSystemOptions[selectedOption] ? (
+                <MiniBasicSystem nodes={nodes} elements={elements} supports={supports} removedConstraints={basicSystemOptions[selectedOption].removed} width={360} height={320}/>
+              ) : <span className="text-slate-500 text-sm">Wybierz kombinację z listy po lewej.</span>
+            )}
           </div>
         </div>
         ) : (

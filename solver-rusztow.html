@@ -260,14 +260,21 @@ function solveGrillage(nodes, elements, supports, loads, internalUnitLoad = null
     // f_eq_local = [qL/2, 0, qL²/12, qL/2, 0, -qL²/12]
     const fEqLocal = [q*L/2, 0, q*L*L/12, q*L/2, 0, -q*L*L/12];
     const releasedIdx = getReleasedLocalIndices(el);
-    // Jednostkowe obciążenie rozcięcia wewnętrznego (metoda sił, stan X_i=1): samo-równoważąca
-    // się "jednostka" działająca TYLKO na ten jeden element, jako poprawka RHS w punkcie
-    // zwolnienia — wstrzykiwana PRZED kondensacją. `fEqLocal` "rzeczywiste" (do odzyskania sił
-    // wewnętrznych) zostaje nienaruszone — patrz użycie niżej przy `fl`.
+    // Jednostkowe obciążenie rozcięcia wewnętrznego (metoda sił, stan X_i=1).
+    // Po stronie elementu: +1 w zwolnionym DOF (przed kondensacją) → element "widzi" jednostkową
+    // siłę wewnętrzną. Po stronie węzła globalnego: −1 w tym samym kierunku (transformowanym do
+    // globalnych DOF) → samorównoważąca para; reakcje podporowe = 0. `fEqLocal` oryginalne
+    // (do odzyskania sił wewnętrznych) zostaje nienaruszone — patrz `fl` niżej.
     let fEqLocalForCond = fEqLocal;
     if (internalUnitLoad && internalUnitLoad.elementId === el.id) {
       const tIdx = releaseLocalIndex(internalUnitLoad.relKey, internalUnitLoad.relType);
       fEqLocalForCond = fEqLocal.map((v, i) => i === tIdx ? v + 1 : v);
+      // Strona węzła: T[tIdx] to wiersz tIdx macierzy T (= kolumna tIdx macierzy T^T).
+      // Subtrahentem jest składowa globalna odpowiadająca lokalnemu DOF tIdx.
+      const nBal = tIdx < 3 ? i1 : i2;
+      const tRow = T[tIdx];
+      const off  = tIdx < 3 ? 0 : 3;
+      for (let d = 0; d < 3; d++) F[nBal * 3 + d] -= tRow[off + d];
     }
     // Przeguby: kondensacja statyczna zwolnionych DOF PRZED assemblacją do globalnego układu —
     // Klocal/fEqLocal oryginalne (nieskondensowane) zachowujemy do odzyskania sił wewnętrznych.

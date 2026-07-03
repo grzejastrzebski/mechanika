@@ -147,17 +147,21 @@
     @page{margin:14mm}
     html,body{background:#fff !important;background-image:none !important;height:auto !important;min-height:0 !important;max-height:none !important;overflow:visible !important}
     .wrap{max-width:100%;padding:0;overflow:visible !important;height:auto !important}
-    .layout{display:block !important}
     #out{overflow:visible !important;height:auto !important}
-    header.top, .no-print, .scheme-legend, #scheme_mode, .print-hide{display:none !important}
+    header.top, .no-print, .scheme-legend, #scheme_mode{display:none !important}
     .print-only{display:block !important}
     h2.sec{page-break-after:avoid;break-after:avoid;border-color:#999}
     h2.sec .n{display:none}
+    /* Grid/flex kontenery nie dają się dzielić na strony w druku Chromium — jeśli są wyższe
+       niż jedna strona, reszta zostaje po prostu ucięta zamiast przejść na kolejną kartkę.
+       Wymuszamy więc układ blokowy na kluczowych kontenerach wyników (m.in. siatka wykresów
+       .charts, która przy 5 kartach w 1-2 kolumnach łatwo przekracza wysokość strony). */
+    .layout,.charts{display:block !important}
     .bc-group,.bc-cond,.formula,.result-const,.chartbox,table.vals,.scheme-card{page-break-inside:avoid;break-inside:avoid}
+    .chartbox{margin-bottom:14px}
     .bc-eq,.formula,.math,.result-const{background:#fff !important}
     .scheme-card,.bc-card,.chartbox{box-shadow:none !important;border-color:#bbb !important;overflow:visible !important}
     canvas{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .charts{grid-template-columns:1fr 1fr}
   }
 </style>
 </head>
@@ -900,7 +904,6 @@ function compute(){
   const rU=v=>v+(SYM_RQ?'R':' m'), qU=v=>v+(SYM_RQ?'q':' kN/m²');
 
   // SECTION: model summary
-  html+='<div class="print-hide">';
   html+='<h2 class="sec"><span class="n">2</span>Przyjęty model</h2>';
   html+='<div class="panel"><div>';
   if(MODE==='solid') html+='Płyta <b>pełna</b>, r ∈ (0, '+rU(rB)+'), q = '+qU(regions[0].q)+'. ';
@@ -911,7 +914,7 @@ function compute(){
   labels.forEach(l=>html+='<span class="pill">'+l+'</span>');
   html+='</div>';
   html+='<div class="note">Dla płyty pełnej (obszar zawierający środek r=0) człony C·ln(r) oraz C·r²·ln(r) odpadają (dałyby nieskończone ugięcie w środku) → tylko 2 stałe.</div>';
-  html+='</div>'; // koniec print-hide (Przyjęty model)
+  html+='</div>'; // koniec .panel (Przyjęty model)
 
   // SECTION: warunki brzegowe (rozpisane)
   html+='<h2 class="sec"><span class="n">3</span>Warunki brzegowe</h2>';

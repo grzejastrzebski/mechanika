@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pręt zakrzywiony w planie koła — metoda Maxwella-Mohra</title>
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async onload="if (typeof render === 'function') render();"></script>
 <style>
   :root{
     --ink:#16243a; --paper:#fbfaf5; --line:#c9d6e3; --grid:#dde7ef;
@@ -82,15 +89,19 @@
     border-radius:50%;background:var(--blue);color:#fff;font-size:.8rem;font-family:ui-monospace,monospace;flex-shrink:0}
   .step .lead{font-style:italic;color:var(--muted);margin:2px 0 8px;font-size:.92rem}
   .step .loadhdr{font-style:italic;color:var(--gold);font-size:.86rem;margin:8px 0 4px}
-  .eq{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;background:#f3f1e8;
-    border-left:3px solid var(--blue);padding:7px 12px;border-radius:0 6px 6px 0;margin:4px 0;
-    overflow-wrap:break-word;white-space:normal}
-  .eq.big{font-size:1.05rem}
-  .vfrac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;
-    margin:0 3px;font-size:.78em;line-height:1.15;position:relative;top:.15em}
-  .vfrac span{display:block;padding:0 3px}
-  .vfrac span:first-child{border-bottom:1px solid currentColor}
+  .eq{font-size:1rem;background:#f3f1e8;
+    border-left:3px solid var(--blue);padding:9px 12px;border-radius:0 6px 6px 0;margin:6px 0;
+    overflow-x:auto}
+  .eq.big{font-size:1.08rem}
   .step .result-line{font-weight:700;color:var(--red);font-size:1.05rem}
+  .step .result-line .eq{background:#fff;border-color:var(--red);margin-top:6px}
+  .msketch-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 4px}
+  .msketch{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 6px 2px}
+  .msketch .cap{font-size:.78rem;color:var(--muted);font-style:italic;margin:2px 4px 4px;text-align:center}
+  .msketch svg{width:100%;height:auto;display:block}
+  @media(max-width:520px){.msketch-row{grid-template-columns:1fr}}
+  .btn-print{background:var(--blue);box-shadow:0 2px 0 #142a63;margin:0 0 14px}
+  .btn-print:active{box-shadow:0 0 0 #142a63}
   .scheme-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px;margin:0 0 12px}
   .scheme-card .cap{font-size:.8rem;color:var(--muted);font-style:italic;margin:2px 6px 6px}
   .scheme-card svg{width:100%;height:auto;min-width:280px;display:block}
@@ -105,10 +116,14 @@
   }
   @media print{
     @page{margin:14mm}
-    body{background:#fff !important;background-image:none !important}
+    body{background:#fff !important;background-image:none !important;
+      font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif !important}
+    .wrap{max-width:none}
     .no-print{display:none !important}
     .layout{display:block !important}
-    .result-const,.scheme-card,table.vals{page-break-inside:avoid;break-inside:avoid}
+    .col-results{width:100%}
+    .result-const,.scheme-card,table.vals,
+    .step,.eq,.msketch,.msketch-row,mjx-container{page-break-inside:avoid;break-inside:avoid}
   }
 </style>
 </head>
@@ -155,7 +170,7 @@
 
       <fieldset>
         <legend>Sztywność</legend>
-        <label>Stosunek sztywności EJ/GC</label>
+        <label>Stosunek sztywności EJ/GI₀</label>
         <input id="ejgc" type="text" inputmode="decimal" value="1.3">
       </fieldset>
 
@@ -192,6 +207,7 @@
 
     <!-- ============ PRAWA KOLUMNA: schemat + wyniki ============ -->
     <div class="col-results">
+      <button class="btn btn-print no-print" id="btnPrint" type="button">Drukuj rozwiązanie</button>
       <div class="scheme-card">
         <div class="cap">Schemat — pręt zakrzywiony w planie koła, widok z góry</div>
         <svg id="scheme" viewBox="0 0 520 300" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -246,22 +262,39 @@ function targetExtraPower(target) { return target === 'deflection' ? 2 : 1; }
    obciążeniem, nie zmienia wielkości fizycznej). `dir` wpływa więc
    tylko na WYŚWIETLANE wzory/tabelę (Krok 1-3), nie na Krok 4.
    ------------------------------------------------------------ */
-// Pełne wzory fizyczne (z R) — do tekstowego raportu "krok po kroku".
+// Pełne wzory fizyczne (z R), w LaTeX-u — do raportu "krok po kroku" renderowanego przez MathJax.
+// Symbol obciążenia skupionego M nazywamy M_0, żeby nie kolidował z funkcją momentu gnącego M(φ).
 const FORMULA = {
-  P: { mzSign: -1, mzBody: 'R·sin(φ)',         msSign: -1, msBody: 'R·(1 − cos(φ))' },
-  M: { mzSign: -1, mzBody: 'cos(φ)',           msSign: +1, msBody: 'sin(φ)' },
-  q: { mzSign: -1, mzBody: 'R²·(1 − cos(φ))',  msSign: +1, msBody: 'R²·(φ − sin(φ))' },
+  P: { mzSign: -1, mzBody: 'R\\sin\\varphi',              msSign: -1, msBody: 'R(1-\\cos\\varphi)' },
+  M: { mzSign: -1, mzBody: '\\cos\\varphi',                msSign: +1, msBody: '\\sin\\varphi' },
+  q: { mzSign: -1, mzBody: 'R^{2}(1-\\cos\\varphi)',       msSign: +1, msBody: 'R^{2}(\\varphi-\\sin\\varphi)' },
 };
-// Pojedynczy podpisany człon "±coef·wyrażenie" (coef = symbol obciążenia: P/M/q albo '1' dla wirtualnego).
-function termStr(sign, coefText, body) {
-  return (sign < 0 ? '−' : '') + `${coefText}·${body}`;
+const LOAD_SYMBOL_TEX = { P: 'P', M: 'M_0', q: 'q' };
+// Pojedynczy podpisany człon LaTeX "±coef·wyrażenie" (coef = symbol obciążenia, albo '1' dla wirtualnego — wtedy pomijany).
+function texTerm(sign, coefTex, bodyTex) {
+  const coefPart = coefTex === '1' ? '' : coefTex;
+  return (sign < 0 ? '-' : '') + coefPart + bodyTex;
 }
-// Łączy kilka już podpisanych członów w jeden ciąg z poprawnymi spacjami wokół +/−.
-function joinTerms(strs) {
+// Łączy kilka już podpisanych członów LaTeX w jeden ciąg z poprawnymi spacjami wokół +/−.
+function joinTexTerms(strs) {
   return strs.map((s, i) => {
     if (i === 0) return s;
-    return s.startsWith('−') ? ` ${s}` : ` + ${s}`;
+    return s.startsWith('-') ? ` ${s}` : ` + ${s}`;
   }).join('');
+}
+// Wyraża kąt (w stopniach) jako "ładny" ułamek LaTeX z π, gdy to możliwe (np. 90° -> \frac{\pi}{2}); inaczej liczba w radianach.
+function phiMaxTex(deg) {
+  const gcd = (a, b) => b ? gcd(b, a % b) : a;
+  for (let q = 1; q <= 12; q++) {
+    const p = Math.round(deg / 180 * q);
+    if (p === 0) continue;
+    if (Math.abs(deg / 180 - p / q) < 1e-6) {
+      const g = gcd(Math.abs(p), q), pp = p / g, qq = q / g;
+      if (qq === 1) return pp === 1 ? '\\pi' : `${pp}\\pi`;
+      return pp === 1 ? `\\frac{\\pi}{${qq}}` : `\\frac{${pp}\\pi}{${qq}}`;
+    }
+  }
+  return fmt(deg * Math.PI / 180, 4);
 }
 
 // Całkowanie Simpsona f(phi) na [a,b] w n krokach (n zostaje wyrównane do parzystej liczby).
@@ -275,11 +308,13 @@ function simpson(f, a, b, n) {
   return sum * h / 3;
 }
 
-// Bezwymiarowy współczynnik całkowy dla danego obciążenia i szukanej wielkości
-// (jednostkowe obciążenie rzeczywiste x jednostkowe obciążenie wirtualne, z wagą EJ/GC na członie Ms).
-function integralCoeff(loadKey, target, phiMax, ejgc, n = 720) {
+// Rozbicie bezwymiarowego współczynnika całkowego na wkład od zginania (Mz·Mz̄) i od skręcania
+// (ważony EJ/GI0, Ms·Ms̄) — jednostkowe obciążenie rzeczywiste x jednostkowe obciążenie wirtualne.
+function integralParts(loadKey, target, phiMax, ejgc, n = 720) {
   const ld = SHAPES[loadKey], v = SHAPES[targetVirtualKey(target)];
-  return simpson(phi => ld.mz(phi) * v.mz(phi) + ejgc * ld.ms(phi) * v.ms(phi), 0, phiMax, n);
+  const bend = simpson(phi => ld.mz(phi) * v.mz(phi), 0, phiMax, n);
+  const tors = ejgc * simpson(phi => ld.ms(phi) * v.ms(phi), 0, phiMax, n);
+  return { bend, tors, total: bend + tors };
 }
 
 // Rzeczywiste Mz/Ms (suma aktywnych obciążeń) w danym phi. `dir`: patrz komentarz przy FORMULA.
@@ -303,9 +338,9 @@ function computeAll({ R, phiMaxDeg, ejgc, loads, target, dir = 1 }) {
     const val = loads[key];
     if (!val) continue;
     const power = SHAPES[key].dim + targetExtraPower(target);
-    const coeff = integralCoeff(key, target, phiMax, ejgc);
-    const contribution = val * Math.pow(R, power) * coeff;
-    terms.push({ key, val, power, coeff, contribution });
+    const parts = integralParts(key, target, phiMax, ejgc);
+    const contribution = val * Math.pow(R, power) * parts.total;
+    terms.push({ key, val, power, coeff: parts.total, bend: parts.bend, tors: parts.tors, contribution });
   }
   const total = terms.reduce((s, t) => s + t.contribution, 0);
   const table = [0, phiMax / 2, phiMax].map(phi => ({
@@ -380,79 +415,119 @@ function drawScheme(R, phiMaxDeg, loads, dir, symbolic = false) {
   $('scheme').innerHTML = svg;
 }
 
-const LOAD_LABEL_PL = { P: 'siła skupiona P', M: 'moment skupiony M', q: 'obciążenie ciągłe q' };
-const vfrac = (n, d) => `<span class="vfrac"><span>${n}</span><span>${d}</span></span>`;
-
-// Buduje treść czterech "Kroków" raportu (zwraca surowe HTML-fragmenty per krok) —
-// patrz komentarz przy FORMULA co do roli `dir`.
-// Łączy człony wynikowe "coeff · (symbol·R^n)/EJ" w jedną sumę symboliczną, z poprawnymi znakami.
-function joinSymbolicSum(terms) {
-  return terms.map((t, i) => {
-    const neg = t.coeff < 0;
-    const piece = `${fmt(Math.abs(t.coeff), 5)} · ${t.text}`;
-    if (i === 0) return neg ? `−${piece}` : piece;
-    return neg ? ` − ${piece}` : ` + ${piece}`;
-  }).join('');
+// Uproszczony szkic wykresu momentu (M zginający albo m skręcający) narysowany jako "wstążka"
+// wzdłuż zakrzywionego pręta — ordynaty prostopadłe do osi, znormalizowane do stałej amplitudy
+// (to poglądowy szkic, nie rysunek do skali). `valueFn(phi)` zwraca wartość momentu w danym phi.
+function drawMomentDiagramSVG(svgId, phiMaxDeg, dir, valueFn, color) {
+  const el = document.getElementById(svgId);
+  if (!el) return;
+  const W = 260, H = 170, cx = W / 2, Rpx = 56, apexY = 30;
+  const cy = apexY + Rpx;
+  const phiMax = phiMaxDeg * Math.PI / 180;
+  const geomAngle = phi => Math.PI / 2 - dir * phi;
+  const pt = phi => { const a = geomAngle(phi); return [cx + Rpx * Math.cos(a), cy - Rpx * Math.sin(a)]; };
+  const nrm = phi => { const a = geomAngle(phi); return [Math.cos(a), -Math.sin(a)]; };
+  const N = 48;
+  const raw = []; for (let k = 0; k <= N; k++) raw.push(valueFn(phiMax * k / N));
+  const maxAbs = Math.max(...raw.map(Math.abs));
+  const scale = maxAbs < 1e-9 ? 0 : 22 / maxAbs;
+  const centerPts = [], diagPts = [];
+  for (let k = 0; k <= N; k++) {
+    const phi = phiMax * k / N;
+    const [px, py] = pt(phi), [nx, ny] = nrm(phi);
+    centerPts.push([px, py]);
+    diagPts.push([px + nx * raw[k] * scale, py + ny * raw[k] * scale]);
+  }
+  const pathM = arr => arr.map((p, i) => (i === 0 ? 'M ' : 'L ') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const pathL = arr => arr.map(p => 'L ' + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  let svg = `<path d="${pathM(diagPts)} ${pathL(centerPts.slice().reverse())} Z" fill="${color}" fill-opacity=".25" stroke="${color}" stroke-width="1.1"/>`;
+  svg += `<path d="${pathM(centerPts)}" fill="none" stroke="#16243a" stroke-width="2.2"/>`;
+  [0, N].forEach(k => {
+    svg += `<line x1="${centerPts[k][0].toFixed(1)}" y1="${centerPts[k][1].toFixed(1)}" x2="${diagPts[k][0].toFixed(1)}" y2="${diagPts[k][1].toFixed(1)}" stroke="${color}" stroke-width="1" stroke-dasharray="2,2"/>`;
+  });
+  // koniec swobodny (kółko) i utwierdzenie (krótka kreska w poprzek pręta)
+  svg += `<circle cx="${centerPts[0][0].toFixed(1)}" cy="${centerPts[0][1].toFixed(1)}" r="3.5" fill="#fff" stroke="#1f3a93" stroke-width="1.3"/>`;
+  const [ex, ey] = centerPts[N], [nex, ney] = nrm(phiMax);
+  svg += `<line x1="${(ex - nex * 9).toFixed(1)}" y1="${(ey - ney * 9).toFixed(1)}" x2="${(ex + nex * 9).toFixed(1)}" y2="${(ey + ney * 9).toFixed(1)}" stroke="#16243a" stroke-width="2.4"/>`;
+  el.innerHTML = svg;
 }
 
+const LOAD_LABEL_PL = { P: 'siła skupiona $P$', M: 'moment skupiony $M_0$', q: 'obciążenie ciągłe $q$' };
+// Łączy człony wynikowe LaTeX "coeff·wyrażenie" w jedną sumę symboliczną, z poprawnymi znakami.
+function joinSymbolicSumTex(terms) {
+  return terms.map((t, i) => {
+    const neg = t.coeff < 0;
+    const piece = `${fmt(Math.abs(t.coeff), 5)}\\cdot${t.tex}`;
+    if (i === 0) return neg ? `-${piece}` : piece;
+    return neg ? ` - ${piece}` : ` + ${piece}`;
+  }).join('');
+}
+const rPowTex = p => p > 1 ? `R^{${p}}` : 'R';
+
+// Buduje treść czterech "Kroków" raportu w LaTeX-u (zwraca surowe HTML-fragmenty per krok,
+// renderowane później przez MathJax.typesetPromise) — patrz komentarz przy FORMULA co do roli `dir`.
 function buildStepsHTML({ loads, dir, target, phiMaxDeg, res, symbolic = false }) {
   const activeKeys = ['P', 'M', 'q'].filter(k => loads[k]);
   const virtKey = targetVirtualKey(target);
-  const virtSymbol = virtKey === 'P' ? 'P̄' : 'M̄';
-  const targetSymbol = target === 'deflection' ? 'δ' : 'θ';
-  const phiMaxRad = phiMaxDeg * Math.PI / 180;
-  const phiMaxStr = `${fmt(phiMaxDeg, 1)}° = ${fmt(phiMaxRad, 4)} rad`;
+  const virtSymbolTex = virtKey === 'P' ? '\\bar{P}' : '\\overline{M}_0';
+  const phiMaxLatex = phiMaxTex(phiMaxDeg);
 
   // Krok 1: momenty od rzeczywistych obciążeń (per obciążenie + superpozycja, jeśli >1 aktywne).
   const mzRealTerms = [], msRealTerms = [];
   let step1 = '';
   activeKeys.forEach(k => {
     const f = FORMULA[k];
-    const mzStr = termStr(f.mzSign, k, f.mzBody);
-    const msStr = termStr(f.msSign * dir, k, f.msBody);
-    mzRealTerms.push(mzStr); msRealTerms.push(msStr);
-    const valAnnot = symbolic ? '' : ` (${k} = ${fmt(loads[k], 2)})`;
+    const mzT = texTerm(f.mzSign, LOAD_SYMBOL_TEX[k], f.mzBody);
+    const msT = texTerm(f.msSign * dir, LOAD_SYMBOL_TEX[k], f.msBody);
+    mzRealTerms.push(mzT); msRealTerms.push(msT);
+    const valAnnot = symbolic ? '' : ` ($${k} = ${fmt(loads[k], 2)}$)`;
     step1 += `<div class="loadhdr">Obciążenie: ${LOAD_LABEL_PL[k]}${valAnnot}</div>
-      <div class="eq">M<sub>z</sub> = ${mzStr}</div>
-      <div class="eq">M<sub>s</sub> = ${msStr}</div>`;
+      <div class="eq">\\[ M(\\varphi) = ${mzT} \\]</div>
+      <div class="eq">\\[ m(\\varphi) = ${msT} \\]</div>`;
   });
   if (activeKeys.length > 1) {
     step1 += `<div class="loadhdr">Superpozycja (suma od wszystkich obciążeń):</div>
-      <div class="eq big">M<sub>z</sub> = ${joinTerms(mzRealTerms)}</div>
-      <div class="eq big">M<sub>s</sub> = ${joinTerms(msRealTerms)}</div>`;
+      <div class="eq big">\\[ M(\\varphi) = ${joinTexTerms(mzRealTerms)} \\]</div>
+      <div class="eq big">\\[ m(\\varphi) = ${joinTexTerms(msRealTerms)} \\]</div>`;
   }
+  step1 += `<div class="msketch-row">
+    <div class="msketch"><div class="cap">Wykres $M(\\varphi)$ — zginanie</div><svg id="mzSketch1" viewBox="0 0 260 170"></svg></div>
+    <div class="msketch"><div class="cap">Wykres $m(\\varphi)$ — skręcanie</div><svg id="msSketch1" viewBox="0 0 260 170"></svg></div>
+  </div>`;
 
   // Krok 2: momenty od obciążenia jednostkowego (wirtualnego), zgodnego z szukaną wielkością.
   const vf = FORMULA[virtKey];
-  const vmzStr = termStr(vf.mzSign, '1', vf.mzBody);
-  const vmsStr = termStr(vf.msSign * dir, '1', vf.msBody);
-  const step2 = `<div class="loadhdr">Obciążenie jednostkowe: ${virtSymbol} = 1 (${target === 'deflection' ? 'odpowiada szukanemu ugięciu' : 'odpowiada szukanemu kątowi obrotu'})</div>
-    <div class="eq">M̄<sub>z</sub> = ${vmzStr}</div>
-    <div class="eq">M̄<sub>s</sub> = ${vmsStr}</div>`;
+  const vmzT = texTerm(vf.mzSign, '1', vf.mzBody);
+  const vmsT = texTerm(vf.msSign * dir, '1', vf.msBody);
+  const step2 = `<div class="loadhdr">Obciążenie jednostkowe $${virtSymbolTex} = 1$ (${target === 'deflection' ? 'odpowiada szukanemu ugięciu' : 'odpowiada szukanemu kątowi obrotu'})</div>
+    <div class="eq">\\[ \\overline{M}(\\varphi) = ${vmzT} \\]</div>
+    <div class="eq">\\[ \\overline{m}(\\varphi) = ${vmsT} \\]</div>
+    <div class="msketch-row">
+      <div class="msketch"><div class="cap">Wykres $\\overline{M}(\\varphi)$ — zginanie</div><svg id="mzSketch2" viewBox="0 0 260 170"></svg></div>
+      <div class="msketch"><div class="cap">Wykres $\\overline{m}(\\varphi)$ — skręcanie</div><svg id="msSketch2" viewBox="0 0 260 170"></svg></div>
+    </div>`;
 
   // Krok 3: ogólny wzór Maxwella-Mohra, a potem to samo z podstawionymi wzorami z Kroku 1-2.
-  const sumMz = mzRealTerms.length > 1 ? `(${joinTerms(mzRealTerms)})` : mzRealTerms[0];
-  const sumMs = msRealTerms.length > 1 ? `(${joinTerms(msRealTerms)})` : msRealTerms[0];
+  const sumMzTex = mzRealTerms.length > 1 ? `\\left(${joinTexTerms(mzRealTerms)}\\right)` : mzRealTerms[0];
+  const sumMsTex = msRealTerms.length > 1 ? `\\left(${joinTexTerms(msRealTerms)}\\right)` : msRealTerms[0];
   const step3 = `
-    <div class="eq big">${targetSymbol} = (1/EJ)·[ ∫<sub>0</sub><sup>φmax</sup> M<sub>z</sub>·M̄<sub>z</sub> ds + ${vfrac('EJ','GC')}· ∫<sub>0</sub><sup>φmax</sup> M<sub>s</sub>·M̄<sub>s</sub> ds ]</div>
-    <div class="lead">gdzie ds = R·dφ, φmax = ${phiMaxStr}. Po podstawieniu wzorów z Kroku 1 i 2:</div>
-    <div class="eq">${targetSymbol} = (1/EJ)·[ ∫<sub>0</sub><sup>φmax</sup> ${sumMz}·(${vmzStr})·R dφ + ${vfrac('EJ','GC')}· ∫<sub>0</sub><sup>φmax</sup> ${sumMs}·(${vmsStr})·R dφ ]</div>`;
+    <div class="eq big">\\[ W_k = \\frac{1}{EJ}\\left[\\int_{0}^{${phiMaxLatex}} M(\\varphi)\\,\\overline{M}(\\varphi)\\,R\\,d\\varphi \\;+\\; \\frac{EJ}{GI_0}\\int_{0}^{${phiMaxLatex}} m(\\varphi)\\,\\overline{m}(\\varphi)\\,R\\,d\\varphi\\right] \\]</div>
+    <div class="lead">gdzie $ds = R\\,d\\varphi$, $\\varphi_{max} = ${phiMaxLatex}$ (${fmt(phiMaxDeg, 1)}°). Po podstawieniu wzorów z Kroku 1 i 2:</div>
+    <div class="eq">\\[ W_k = \\frac{1}{EJ}\\left[\\int_{0}^{${phiMaxLatex}} ${sumMzTex}\\left(${vmzT}\\right)R\\,d\\varphi \\;+\\; \\frac{EJ}{GI_0}\\int_{0}^{${phiMaxLatex}} ${sumMsTex}\\left(${vmsT}\\right)R\\,d\\varphi\\right] \\]</div>`;
 
-  // Krok 4: wynik silnika (całkowanie numeryczne dla współczynnika), rozbity na człony superpozycji.
-  let step4;
-  if (symbolic) {
-    const symTerms = res.terms.map(t => {
-      const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
-      return { coeff: t.coeff, text: `(${t.key}·R${rPow})/EJ` };
-    });
-    step4 = `<div class="eq big result-line">${targetSymbol} = ${joinSymbolicSum(symTerms)}</div>`;
-  } else {
-    const step4terms = res.terms.map(t => {
-      const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
-      return `<div class="eq">wkład od ${t.key}: ${fmt(t.coeff, 5)} · (${t.key}·R${rPow})/EJ = <b>${fmt(t.contribution, 5)}</b> / EJ</div>`;
-    }).join('');
-    step4 = `${step4terms}<div class="result-line">Wynik: ${targetSymbol} = ${fmt(res.total, 5)} / EJ</div>`;
-  }
+  // Krok 4: wynik silnika (całkowanie numeryczne), rozbity na wkład od zginania i skręcania.
+  const perLoad = res.terms.map(t => {
+    const sym = LOAD_SYMBOL_TEX[t.key], rp = rPowTex(t.power);
+    const numericTail = symbolic ? '' : ` = ${fmt(t.contribution, 5)}\\ /\\ EJ`;
+    return `<div class="eq">
+      <div class="loadhdr">Wkład od: ${LOAD_LABEL_PL[t.key]}</div>
+      \\[ \\frac{1}{EJ}\\Big[\\underbrace{${fmt(t.bend, 5)}}_{\\text{zginanie}} + \\underbrace{${fmt(t.tors, 5)}}_{\\text{skręcanie}}\\Big]\\,${sym}${rp} = ${fmt(t.coeff, 5)}\\cdot\\frac{${sym}${rp}}{EJ}${numericTail} \\]
+    </div>`;
+  }).join('');
+  const finalTex = symbolic
+    ? joinSymbolicSumTex(res.terms.map(t => ({ coeff: t.coeff, tex: `\\frac{${LOAD_SYMBOL_TEX[t.key]}${rPowTex(t.power)}}{EJ}` })))
+    : `${fmt(res.total, 5)}\\ /\\ EJ`;
+  const step4 = `${perLoad}<div class="result-line">Wynik końcowy:<div class="eq big">\\[ W_k = ${finalTex} \\]</div></div>`;
 
   return { step1, step2, step3, step4 };
 }
@@ -491,28 +566,38 @@ function render() {
 
   const res = computeAll({ R, phiMaxDeg, ejgc, loads, target, dir });
   const targetLabel = target === 'deflection' ? 'Ugięcie δ w φ=0 (na kierunku P)' : 'Kąt obrotu θ w φ=0 (na kierunku M)';
+  const targetSymbol = target === 'deflection' ? '\\delta' : '\\theta';
   const steps = buildStepsHTML({ loads, dir, target, phiMaxDeg, res, symbolic });
 
   let html = `<h2 class="sec"><span class="n">»</span>${targetLabel} — krok po kroku</h2>
   <div class="steps">
-    <div class="step"><div class="stitle"><span class="num">1</span>Rozkład momentów M<sub>z</sub> i M<sub>s</sub> od obciążeń zewnętrznych</div>${steps.step1}</div>
-    <div class="step"><div class="stitle"><span class="num">2</span>Rozkład momentów od obciążenia jednostkowego</div>${steps.step2}</div>
-    <div class="step"><div class="stitle"><span class="num">3</span>Zestawienie całki (zasada prac wirtualnych)</div>${steps.step3}</div>
+    <div class="step"><div class="stitle"><span class="num">1</span>Stan rzeczywisty — obciążenia zewnętrzne</div>${steps.step1}</div>
+    <div class="step"><div class="stitle"><span class="num">2</span>Stan wirtualny — obciążenie jednostkowe</div>${steps.step2}</div>
+    <div class="step"><div class="stitle"><span class="num">3</span>Równanie pracy wirtualnej</div>${steps.step3}</div>
     <div class="step"><div class="stitle"><span class="num">4</span>Wynik końcowy</div>${steps.step4}</div>
   </div>
-  <div class="note">${symbolic
-    ? 'Tryb symboliczny: obliczenia wykonano dla R=1 i wartości jednostkowych aktywnych obciążeń — powyższy wynik to współczynnik liczbowy przy wskazanym wyrażeniu symbolicznym.'
-    : `Jednostka długości: ${unit}; EJ pozostaje symboliczne (nie podano jego wartości liczbowej, tylko stosunek EJ/GC).`}</div>`;
+  <div class="note">Ponieważ obciążenie wirtualne przyjęto jednostkowe ($=1$), praca wirtualna $W_k$ z Kroku 3-4 jest liczbowo równa szukanej wielkości: $${targetSymbol} = W_k$.
+    ${symbolic
+      ? ' Tryb symboliczny: obliczenia wykonano dla R=1 i wartości jednostkowych aktywnych obciążeń — wynik to współczynnik liczbowy przy wskazanym wyrażeniu symbolicznym.'
+      : ` Jednostka długości: ${unit}; EJ pozostaje symboliczne (nie podano jego wartości liczbowej, tylko stosunek EJ/GI₀).`}</div>`;
 
-  html += `<h2 class="sec"><span class="n">✓</span>Tabela weryfikacyjna — Mz, Ms (rzeczywiste)</h2>
-  <table class="vals"><thead><tr><th>φ</th><th>Mz</th><th>Ms</th></tr></thead><tbody>`;
+  html += `<h2 class="sec"><span class="n">✓</span>Tabela weryfikacyjna — $M$, $m$ (rzeczywiste)</h2>
+  <table class="vals"><thead><tr><th>$\\varphi$</th><th>$M$</th><th>$m$</th></tr></thead><tbody>`;
   res.table.forEach(row => {
     html += `<tr><td>${fmt(row.phiDeg, 1)}°</td><td>${fmt(row.Mz, 4)}</td><td>${fmt(row.Ms, 4)}</td></tr>`;
   });
   html += `</tbody></table>
-  <div class="note">φ=0 — koniec swobodny (miejsce przyłożenia obciążeń), φ=φmax — utwierdzenie. Przy φ=0 Mz=Ms=0 dla wszystkich trzech typów obciążenia (zgodnie ze wzorami) — to dobry test silnika numerycznego.</div>`;
+  <div class="note">φ=0 — koniec swobodny (miejsce przyłożenia obciążeń), φ=φmax — utwierdzenie. Przy φ=0 $M=m=0$ dla wszystkich trzech typów obciążenia (zgodnie ze wzorami) — to dobry test silnika numerycznego.</div>`;
 
   out.innerHTML = html;
+
+  drawMomentDiagramSVG('mzSketch1', phiMaxDeg, dir, phi => realMoments(loads, R, phi, dir).Mz, '#c0475a');
+  drawMomentDiagramSVG('msSketch1', phiMaxDeg, dir, phi => realMoments(loads, R, phi, dir).Ms, '#a9772b');
+  drawMomentDiagramSVG('mzSketch2', phiMaxDeg, dir, phi => SHAPES[targetVirtualKey(target)].mz(phi), '#c0475a');
+  drawMomentDiagramSVG('msSketch2', phiMaxDeg, dir, phi => dir * SHAPES[targetVirtualKey(target)].ms(phi), '#a9772b');
+  if (window.MathJax && MathJax.typesetPromise) {
+    MathJax.typesetPromise([out]).catch(err => console.error('MathJax typeset failed', err));
+  }
 }
 
 ['symbolicMode','R','unit','phiMaxDeg','ejgc','dir','useP','P','useM','M','useQ','q'].forEach(id => {
@@ -521,6 +606,7 @@ function render() {
 });
 document.querySelectorAll('input[name=target]').forEach(r => r.addEventListener('change', render));
 $('btnCalc').addEventListener('click', render);
+$('btnPrint').addEventListener('click', () => window.print());
 
 // Domyślnie włącz P, żeby od razu było coś do policzenia.
 $('useP').checked = true;

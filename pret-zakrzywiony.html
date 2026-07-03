@@ -42,6 +42,7 @@
     border-radius:7px;background:#eef2f7;color:var(--ink)
   }
   input:focus,select:focus{outline:2px solid var(--blue);outline-offset:-1px;border-color:var(--blue);background:#fff}
+  input:disabled{background:#e9edf2;color:#9aa7b5;cursor:not-allowed;opacity:.8}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
   fieldset{border:1px solid var(--line);border-radius:8px;margin:10px 0 0;padding:6px 12px 10px}
@@ -121,6 +122,15 @@
   <div class="layout">
     <!-- ============ LEWA KOLUMNA: formularz ============ -->
     <div class="col-inputs no-print">
+      <fieldset>
+        <legend>Tryb obliczeń</legend>
+        <label style="display:flex;align-items:center;gap:8px;font-style:normal;color:var(--ink);font-size:.92rem;margin:6px 0 2px">
+          <input id="symbolicMode" type="checkbox" style="width:18px;height:18px;accent-color:var(--blue)">
+          Tryb obliczeń symbolicznych (wynik na oznaczeniach)
+        </label>
+        <div class="note">Promień R oraz wartości obciążeń P, M, q zostają zablokowane — liczony jest tylko współczynnik całki, dla R=1 i obciążeń jednostkowych.</div>
+      </fieldset>
+
       <fieldset>
         <legend>Geometria</legend>
         <div class="row">
@@ -323,7 +333,7 @@ function fmt(x, d = 4) {
 // czyli wprost nad C). Utwierdzenie (φ=φmax) wypada po przeciwnej stronie — w prawo i niżej dla
 // `dir=+1` ("w prawo": φ rośnie w lewo→prawo, zgodnie z ruchem wskazówek zegara patrząc od C),
 // w lewo i niżej dla `dir=-1` ("w lewo": φ rośnie w prawo→lewo, przeciwnie do wskazówek zegara).
-function drawScheme(R, phiMaxDeg, loads, dir) {
+function drawScheme(R, phiMaxDeg, loads, dir, symbolic = false) {
   const W = 520, H = 300, cx = W / 2, Rpx = 110, apexY = 66;
   const cy = apexY + Rpx;
   const phiMax = phiMaxDeg * Math.PI / 180;
@@ -362,9 +372,9 @@ function drawScheme(R, phiMaxDeg, loads, dir) {
   svg += `<circle cx="${x0}" cy="${y0}" r="4" fill="#fff" stroke="#1f3a93" stroke-width="1.5"/>`;
   svg += `<text x="${x0+10}" y="${y0-2}" fill="#1f3a93">φ=0</text>`;
   const ly = y0 - 16;
-  if (loads.P) { svg += `<line x1="${x0}" y1="${ly}" x2="${x0}" y2="${ly-26}" stroke="#b6312a" stroke-width="2" marker-end="url(#ah)"/><text x="${x0+8}" y="${ly-20}" fill="#b6312a">P=${loads.P}</text>`; }
-  if (loads.M) { svg += `<path d="M ${x0-14} ${ly+10} A 14 14 0 1 1 ${x0+10} ${ly+14}" fill="none" stroke="#a9772b" stroke-width="2"/><text x="${x0-4}" y="${ly+34}" fill="#a9772b">M=${loads.M}</text>`; }
-  if (loads.q) { const [mx, my] = pt(phiMax/2); svg += `<text x="${mx}" y="${my-12}" fill="#27632a" text-anchor="middle">q=${loads.q} (na całym łuku)</text>`; }
+  if (loads.P) { svg += `<line x1="${x0}" y1="${ly}" x2="${x0}" y2="${ly-26}" stroke="#b6312a" stroke-width="2" marker-end="url(#ah)"/><text x="${x0+8}" y="${ly-20}" fill="#b6312a">${symbolic ? 'P' : `P=${loads.P}`}</text>`; }
+  if (loads.M) { svg += `<path d="M ${x0-14} ${ly+10} A 14 14 0 1 1 ${x0+10} ${ly+14}" fill="none" stroke="#a9772b" stroke-width="2"/><text x="${x0-4}" y="${ly+34}" fill="#a9772b">${symbolic ? 'M' : `M=${loads.M}`}</text>`; }
+  if (loads.q) { const [mx, my] = pt(phiMax/2); svg += `<text x="${mx}" y="${my-12}" fill="#27632a" text-anchor="middle">${symbolic ? 'q (na całym łuku)' : `q=${loads.q} (na całym łuku)`}</text>`; }
   svg += `</g>`;
   svg += `<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="7" orient="auto"><polygon points="0,0 8,0 4,8" fill="#b6312a"/></marker></defs>`;
   $('scheme').innerHTML = svg;
@@ -375,7 +385,17 @@ const vfrac = (n, d) => `<span class="vfrac"><span>${n}</span><span>${d}</span><
 
 // Buduje treść czterech "Kroków" raportu (zwraca surowe HTML-fragmenty per krok) —
 // patrz komentarz przy FORMULA co do roli `dir`.
-function buildStepsHTML({ loads, dir, target, phiMaxDeg, res }) {
+// Łączy człony wynikowe "coeff · (symbol·R^n)/EJ" w jedną sumę symboliczną, z poprawnymi znakami.
+function joinSymbolicSum(terms) {
+  return terms.map((t, i) => {
+    const neg = t.coeff < 0;
+    const piece = `${fmt(Math.abs(t.coeff), 5)} · ${t.text}`;
+    if (i === 0) return neg ? `−${piece}` : piece;
+    return neg ? ` − ${piece}` : ` + ${piece}`;
+  }).join('');
+}
+
+function buildStepsHTML({ loads, dir, target, phiMaxDeg, res, symbolic = false }) {
   const activeKeys = ['P', 'M', 'q'].filter(k => loads[k]);
   const virtKey = targetVirtualKey(target);
   const virtSymbol = virtKey === 'P' ? 'P̄' : 'M̄';
@@ -391,7 +411,8 @@ function buildStepsHTML({ loads, dir, target, phiMaxDeg, res }) {
     const mzStr = termStr(f.mzSign, k, f.mzBody);
     const msStr = termStr(f.msSign * dir, k, f.msBody);
     mzRealTerms.push(mzStr); msRealTerms.push(msStr);
-    step1 += `<div class="loadhdr">Obciążenie: ${LOAD_LABEL_PL[k]} (${k} = ${fmt(loads[k], 2)})</div>
+    const valAnnot = symbolic ? '' : ` (${k} = ${fmt(loads[k], 2)})`;
+    step1 += `<div class="loadhdr">Obciążenie: ${LOAD_LABEL_PL[k]}${valAnnot}</div>
       <div class="eq">M<sub>z</sub> = ${mzStr}</div>
       <div class="eq">M<sub>s</sub> = ${msStr}</div>`;
   });
@@ -417,30 +438,46 @@ function buildStepsHTML({ loads, dir, target, phiMaxDeg, res }) {
     <div class="lead">gdzie ds = R·dφ, φmax = ${phiMaxStr}. Po podstawieniu wzorów z Kroku 1 i 2:</div>
     <div class="eq">${targetSymbol} = (1/EJ)·[ ∫<sub>0</sub><sup>φmax</sup> ${sumMz}·(${vmzStr})·R dφ + ${vfrac('EJ','GC')}· ∫<sub>0</sub><sup>φmax</sup> ${sumMs}·(${vmsStr})·R dφ ]</div>`;
 
-  // Krok 4: liczbowy wynik silnika (całkowanie numeryczne), rozbity na człony superpozycji.
-  const step4terms = res.terms.map(t => {
-    const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
-    return `<div class="eq">wkład od ${t.key}: ${fmt(t.coeff, 5)} · (${t.key}·R${rPow})/EJ = <b>${fmt(t.contribution, 5)}</b> / EJ</div>`;
-  }).join('');
-  const step4 = `${step4terms}<div class="result-line">Wynik: ${targetSymbol} = ${fmt(res.total, 5)} / EJ</div>`;
+  // Krok 4: wynik silnika (całkowanie numeryczne dla współczynnika), rozbity na człony superpozycji.
+  let step4;
+  if (symbolic) {
+    const symTerms = res.terms.map(t => {
+      const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
+      return { coeff: t.coeff, text: `(${t.key}·R${rPow})/EJ` };
+    });
+    step4 = `<div class="eq big result-line">${targetSymbol} = ${joinSymbolicSum(symTerms)}</div>`;
+  } else {
+    const step4terms = res.terms.map(t => {
+      const rPow = t.power > 1 ? `<sup>${t.power}</sup>` : '';
+      return `<div class="eq">wkład od ${t.key}: ${fmt(t.coeff, 5)} · (${t.key}·R${rPow})/EJ = <b>${fmt(t.contribution, 5)}</b> / EJ</div>`;
+    }).join('');
+    step4 = `${step4terms}<div class="result-line">Wynik: ${targetSymbol} = ${fmt(res.total, 5)} / EJ</div>`;
+  }
 
   return { step1, step2, step3, step4 };
 }
 
+function updateSymbolicUI() {
+  const on = $('symbolicMode').checked;
+  ['R', 'P', 'M', 'q'].forEach(id => { $(id).disabled = on; });
+}
+
 function render() {
-  const R = num('R', 1);
+  updateSymbolicUI();
+  const symbolic = $('symbolicMode').checked;
+  const R = symbolic ? 1 : num('R', 1);
   const unit = $('unit').value;
   const phiMaxDeg = num('phiMaxDeg', 90);
   const ejgc = num('ejgc', 1.3);
   const dir = $('dir').value === 'left' ? -1 : 1;
   const loads = {
-    P: $('useP').checked ? num('P', 0) : 0,
-    M: $('useM').checked ? num('M', 0) : 0,
-    q: $('useQ').checked ? num('q', 0) : 0,
+    P: $('useP').checked ? (symbolic ? 1 : num('P', 0)) : 0,
+    M: $('useM').checked ? (symbolic ? 1 : num('M', 0)) : 0,
+    q: $('useQ').checked ? (symbolic ? 1 : num('q', 0)) : 0,
   };
   const target = document.querySelector('input[name=target]:checked').value;
 
-  drawScheme(R, phiMaxDeg, loads, dir);
+  drawScheme(R, phiMaxDeg, loads, dir, symbolic);
 
   const out = $('out');
   if (phiMaxDeg <= 0 || phiMaxDeg > 360) {
@@ -454,7 +491,7 @@ function render() {
 
   const res = computeAll({ R, phiMaxDeg, ejgc, loads, target, dir });
   const targetLabel = target === 'deflection' ? 'Ugięcie δ w φ=0 (na kierunku P)' : 'Kąt obrotu θ w φ=0 (na kierunku M)';
-  const steps = buildStepsHTML({ loads, dir, target, phiMaxDeg, res });
+  const steps = buildStepsHTML({ loads, dir, target, phiMaxDeg, res, symbolic });
 
   let html = `<h2 class="sec"><span class="n">»</span>${targetLabel} — krok po kroku</h2>
   <div class="steps">
@@ -463,7 +500,9 @@ function render() {
     <div class="step"><div class="stitle"><span class="num">3</span>Zestawienie całki (zasada prac wirtualnych)</div>${steps.step3}</div>
     <div class="step"><div class="stitle"><span class="num">4</span>Wynik końcowy</div>${steps.step4}</div>
   </div>
-  <div class="note">Jednostka długości: ${unit}; EJ pozostaje symboliczne (nie podano jego wartości liczbowej, tylko stosunek EJ/GC).</div>`;
+  <div class="note">${symbolic
+    ? 'Tryb symboliczny: obliczenia wykonano dla R=1 i wartości jednostkowych aktywnych obciążeń — powyższy wynik to współczynnik liczbowy przy wskazanym wyrażeniu symbolicznym.'
+    : `Jednostka długości: ${unit}; EJ pozostaje symboliczne (nie podano jego wartości liczbowej, tylko stosunek EJ/GC).`}</div>`;
 
   html += `<h2 class="sec"><span class="n">✓</span>Tabela weryfikacyjna — Mz, Ms (rzeczywiste)</h2>
   <table class="vals"><thead><tr><th>φ</th><th>Mz</th><th>Ms</th></tr></thead><tbody>`;
@@ -476,7 +515,7 @@ function render() {
   out.innerHTML = html;
 }
 
-['R','unit','phiMaxDeg','ejgc','dir','useP','P','useM','M','useQ','q'].forEach(id => {
+['symbolicMode','R','unit','phiMaxDeg','ejgc','dir','useP','P','useM','M','useQ','q'].forEach(id => {
   $(id).addEventListener('input', render);
   $(id).addEventListener('change', render);
 });
